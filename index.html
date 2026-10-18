@@ -67,10 +67,26 @@ li small{color:var(--muted)}
 .cycles legend{font-size:14px;font-weight:600;padding:0;margin-bottom:8px}
 .cycles legend small{font-weight:400;font-size:13px;color:var(--muted);margin-left:6px}
 .cycles:disabled{opacity:.75}
-.cyc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}
+.cyc{display:grid;grid-template-columns:1.5em minmax(0,1fr) auto;align-items:center;gap:8px 12px;font-size:14px}
+.pair{display:flex;flex-wrap:wrap;gap:6px 20px}
+#cycleList{display:grid;gap:10px}
 .cyc .n{font-family:var(--display);font-size:13px;color:var(--muted);width:1.5em}
 .cyc.now .n{color:var(--accent);font-weight:600}
-.cyc input{width:4.5em;font:inherit;font-variant-numeric:tabular-nums;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.stepper{display:inline-flex;align-items:center;gap:6px}
+.stepper output{min-width:3.5em;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+button.step{width:32px;height:32px;padding:0;font-size:17px;line-height:1;justify-self:auto}
+.settings{display:block}
+.settings summary{display:flex;align-items:baseline;gap:10px;cursor:pointer;list-style:none}
+.settings summary::-webkit-details-marker{display:none}
+.settings summary span{font-size:13px;color:var(--muted)}
+.settings summary::after{content:"";margin-left:auto;align-self:center;width:8px;height:8px;border:solid var(--muted);border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform .2s}
+.settings[open] summary::after{transform:rotate(-135deg)}
+.settings summary:focus-visible{outline:2px solid var(--step);outline-offset:4px;border-radius:4px}
+.settings-body{display:grid;gap:20px;margin-top:20px}
+.ratio-wrap{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.ratio{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden}
+.ratio .f{background:var(--accent)} .ratio .b{background:var(--step)}
+button.danger{border-color:var(--accent);color:var(--accent);font-weight:600}
 .sets{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .tab[aria-selected="true"]{background:var(--fg);border-color:var(--fg);color:var(--bg)}
 .setname{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
@@ -94,8 +110,9 @@ button:disabled{cursor:default;opacity:.5}
     <div class="stats"><span>집중 <b id="focusSum">0</b>분</span><span>탭 이탈 <b id="leaves">0</b>회</span><span><b id="bpm">—</b> BPM</span></div>
     <div class="seq" id="seq" aria-label="현재 드럼 패턴" hidden></div>
   </section>
-  <section class="deck" aria-label="설정">
-    <h2>설정</h2>
+  <details class="deck settings">
+    <summary><h2>설정</h2><span>볼륨 · 미니 창 · 주기 세트</span></summary>
+    <div class="settings-body">
     <div class="sliders">
       <label for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
       <label id="pipDimWrap" for="pipDim" hidden>미니 창 선명도 <input id="pipDim" type="range" min="20" max="100" value="100"></label>
@@ -103,10 +120,12 @@ button:disabled{cursor:default;opacity:.5}
     <fieldset class="cycles" id="cycles">
       <legend>선택한 세트의 주기 <small>10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
       <div class="setname"><label for="setName">세트 이름</label><input id="setName" maxlength="20"><button type="button" class="small" id="addSet">+ 새 세트</button><button type="button" class="small" id="delSet">세트 삭제</button></div>
+      <div class="ratio-wrap"><div class="ratio" id="ratio" aria-hidden="true"></div><span id="ratioTotal"></span></div>
       <div id="cycleList"></div>
       <button type="button" class="small" id="addCycle">+ 주기 추가</button>
     </fieldset>
-  </section>
+    </div>
+  </details>
   <section class="log">
     <header><h2>공부 기록</h2><span id="today">오늘 0분</span></header>
     <ol id="list"></ol>
@@ -209,6 +228,7 @@ function renderSets() {
     b.onclick = () => { active = i; saveCycles(); renderSets(); };
     return b;
   }));
+  disarmDel();
   $('setPick').hidden = sets.length === 1;
   $('addSet').disabled = sets.length >= MAX_SETS;
   $('delSet').disabled = sets.length === 1;
@@ -216,19 +236,33 @@ function renderSets() {
   renderCycles();
 }
 $('addSet').onclick = () => { sets.push({ name: `세트 ${sets.length + 1}`, cycles: [{ f: 50, b: 10 }] }); active = sets.length - 1; saveCycles(); renderSets(); };
-$('delSet').onclick = () => { sets.splice(active, 1); active = Math.max(0, active - 1); saveCycles(); renderSets(); };
+// 세트 삭제는 두 번 눌러야 실행 (3초 안에 '정말 삭제?'를 다시 누름)
+let delArmed = null;
+function disarmDel() { clearTimeout(delArmed); delArmed = null; $('delSet').textContent = '세트 삭제'; $('delSet').classList.remove('danger'); }
+$('delSet').onclick = () => {
+  if (!delArmed) { $('delSet').textContent = '정말 삭제?'; $('delSet').classList.add('danger'); delArmed = setTimeout(disarmDel, 3000); return; }
+  disarmDel(); sets.splice(active, 1); active = Math.max(0, active - 1); saveCycles(); renderSets();
+};
 $('setName').oninput = e => {
   sets[active].name = e.target.value.trim() || `세트 ${active + 1}`;
   $('setTabs').children[active].textContent = sets[active].name; saveCycles();
 };
-const snap = (v, max, fallback) => Number.isFinite(v) ? Math.min(max, Math.max(10, Math.round(v / 10) * 10)) : fallback;
-
+const MAX_MIN = { f: 120, b: 60 };
+// − 50분 + : 10분씩, 집중 10~120분 · 휴식 10~60분
+const stepper = (i, k, v) => {
+  const label = k === 'f' ? '집중' : '휴식';
+  return `<span class="stepper" role="group" aria-label="주기 ${i + 1} ${label}">${label}
+    <button type="button" class="small step" id="s${i}${k}-" data-k="${k}" data-d="-10" aria-label="${label} 10분 줄이기" ${v <= 10 ? 'disabled' : ''}>−</button>
+    <output>${v}분</output>
+    <button type="button" class="small step" id="s${i}${k}+" data-k="${k}" data-d="10" aria-label="${label} 10분 늘리기" ${v >= MAX_MIN[k] ? 'disabled' : ''}>+</button></span>`;
+};
 function renderCycles() {
   $('cycleList').innerHTML = cycles.map((c, i) => `<div class="cyc" data-i="${i}"><span class="n">${i + 1}</span>
-    <label for="f${i}">집중 <input id="f${i}" data-k="f" type="number" min="10" max="120" step="10" value="${c.f}"> 분</label>
-    <label for="b${i}">휴식 <input id="b${i}" data-k="b" type="number" min="10" max="60" step="10" value="${c.b}"> 분</label>
+    <span class="pair">${stepper(i, 'f', c.f)} ${stepper(i, 'b', c.b)}</span>
     <button type="button" class="small del" aria-label="주기 ${i + 1} 삭제" ${cycles.length === 1 ? 'disabled' : ''}>삭제</button></div>`).join('');
   $('addCycle').disabled = cycles.length >= MAX_CYCLES;
+  $('ratio').innerHTML = cycles.map(c => `<span class="f" style="flex:${c.f}"></span><span class="b" style="flex:${c.b}"></span>`).join('');
+  $('ratioTotal').textContent = `한 바퀴 ${hm(cycles.reduce((a, c) => a + c.f + c.b, 0))} · 주황 집중, 파랑 휴식`;
   if (!running) showIdle();
 }
 const hm = m => m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}` : `${m}분`;
@@ -240,15 +274,13 @@ function showIdle() {
   $('state').textContent = sets[active].name;
   $('next').textContent = `주기 ${cycles.length}개 · 한 바퀴 ${hm(cycles.reduce((a, c) => a + c.f + c.b, 0))}`;
 }
-$('cycleList').addEventListener('change', e => {
-  const k = e.target.dataset.k; if (!k) return;
-  const c = cycles[e.target.closest('.cyc').dataset.i];
-  c[k] = snap(+e.target.value, k === 'f' ? 120 : 60, c[k]);
-  saveCycles(); renderCycles();
-});
 $('cycleList').addEventListener('click', e => {
-  if (!e.target.classList.contains('del')) return;
-  cycles.splice(e.target.closest('.cyc').dataset.i, 1); saveCycles(); renderCycles();
+  const btn = e.target.closest('button'); if (!btn) return;
+  const i = btn.closest('.cyc').dataset.i, k = btn.dataset.k;
+  if (k) cycles[i][k] = Math.min(MAX_MIN[k], Math.max(10, cycles[i][k] + +btn.dataset.d));
+  else cycles.splice(i, 1);
+  saveCycles(); renderCycles();
+  if (k) { const again = $(btn.id); if (again && !again.disabled) again.focus(); } // 다시 그린 뒤 키보드 포커스 유지
 });
 $('addCycle').onclick = () => { cycles.push({ f: 50, b: 10 }); saveCycles(); renderCycles(); };
 

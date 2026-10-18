@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>집중 드럼</title>
+<title>몰입 드럼</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
 <style>
@@ -152,9 +152,9 @@ button:disabled{cursor:default;opacity:.5}
 </head>
 <body>
 <main class="wrap">
-  <h1>집중 드럼</h1>
+  <h1>몰입 드럼</h1>
   <section class="deck stage" aria-label="지금">
-    <fieldset class="pick" id="setPick" aria-label="공부할 세트"><div class="sets" id="setTabs" role="tablist"></div></fieldset>
+    <fieldset class="pick" id="setPick" aria-label="몰입할 세트"><div class="sets" id="setTabs" role="tablist"></div></fieldset>
     <div class="attitude" id="attBox">
       <label for="attitude">이번 세션의 태도 <small>지금을 fully 살아 내는 방식을 적어 보세요</small></label>
       <input id="attitude" maxlength="60" autocomplete="off" placeholder="예: 번거로운 풀이도 한 줄씩 온전히 겪어 낸다">
@@ -172,10 +172,10 @@ button:disabled{cursor:default;opacity:.5}
       <input id="reflectNote" maxlength="80" autocomplete="off" placeholder="과정에서 온전히 머문 한 순간 (선택)">
       <div class="reflect-btns"><button type="submit" class="small primary" id="reflectSave">남기기</button><button type="button" class="small" id="reflectSkip">건너뛰기</button></div>
     </form>
-    <button class="primary big" id="toggle">공부 시작하기</button>
+    <button class="primary big" id="toggle">몰입 시작하기</button>
     <button class="small" id="end" hidden>끝내기</button>
     <div class="aux"><button class="small" id="regen">새 비트</button><button class="small" id="pip" hidden>미니 창</button></div>
-    <div class="stats"><span>집중 <b id="focusSum">0</b>분</span><span>탭 이탈 <b id="leaves">0</b>회</span><span><b id="bpm">—</b> BPM</span></div>
+    <div class="stats"><span>몰입 <b id="focusSum">0</b>분</span><span>탭 이탈 <b id="leaves">0</b>회</span><span><b id="bpm">—</b> BPM</span></div>
     <div class="seq" id="seq" aria-label="현재 드럼 패턴" hidden></div>
   </section>
   <details class="deck settings">
@@ -201,12 +201,12 @@ button:disabled{cursor:default;opacity:.5}
     </div>
   </details>
   <section class="log">
-    <h2>공부 기록</h2>
+    <h2>몰입 기록</h2>
     <div class="summary">
-      <div><span class="big-num"><span id="todayMin">0</span><small>분</small></span><span class="cap">오늘 집중</span></div>
-      <div><span class="mid-num" id="weekMin">0분</span><span class="cap">최근 7일 합계</span></div>
+      <div><span class="big-num"><span id="todayMin">0</span><small>분</small></span><span class="cap">오늘 몰입</span></div>
+      <div><span class="mid-num" id="weekMin">0분</span><span class="cap">최근 7일 몰입</span></div>
     </div>
-    <div class="week" id="week" role="list" aria-label="최근 7일 집중 시간"></div>
+    <div class="week" id="week" role="list" aria-label="최근 7일 몰입 시간"></div>
     <div id="list"></div>
   </section>
 </main>
@@ -332,7 +332,7 @@ $('setName').oninput = e => {
 const MAX_MIN = { f: 120, b: 60 };
 // − 50분 + : 10분씩, 집중 10~120분 · 휴식 10~60분
 const stepper = (i, k, v) => {
-  const label = k === 'f' ? '집중' : '휴식';
+  const label = k === 'f' ? '몰입' : '휴식에 몰입';
   return `<span class="stepper" role="group" aria-label="주기 ${i + 1} ${label}">${label}
     <button type="button" class="small step" id="s${i}${k}-" data-k="${k}" data-d="-10" aria-label="${label} 10분 줄이기" ${v <= 10 ? 'disabled' : ''}>−</button>
     <output>${v}분</output>
@@ -344,7 +344,7 @@ function renderCycles() {
     <button type="button" class="small del" aria-label="주기 ${i + 1} 삭제" ${cycles.length === 1 ? 'disabled' : ''}>삭제</button></div>`).join('');
   $('addCycle').disabled = cycles.length >= MAX_CYCLES;
   $('ratio').innerHTML = cycles.map(c => `<span class="f" style="flex:${c.f}"></span><span class="b" style="flex:${c.b}"></span>`).join('');
-  $('ratioTotal').textContent = `한 바퀴 ${hm(cycles.reduce((a, c) => a + c.f + c.b, 0))} · 주황 집중, 파랑 휴식`;
+  $('ratioTotal').textContent = `한 바퀴 ${hm(cycles.reduce((a, c) => a + c.f + c.b, 0))} · 주황 몰입, 파랑 휴식에 몰입`;
   if (!running) showIdle();
 }
 const hm = m => m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}` : `${m}분`;
@@ -381,12 +381,12 @@ function enterPhase(i, ph) {
   document.querySelectorAll('.cyc').forEach((el, j) => el.classList.toggle('now', j === ci));
 }
 function phaseText() {
-  const n = (ci + 1) % cycles.length, label = phase === 'focus' ? '집중' : '휴식';
+  const n = (ci + 1) % cycles.length, label = phase === 'focus' ? '몰입' : '휴식에 몰입';
   $('dial').classList.toggle('paused', paused);
   $('chip').textContent = paused ? '일시정지' : label;
   $('state').textContent = `주기 ${ci + 1}/${cycles.length} · ${label}${paused ? ' · 일시정지' : ''}`;
   $('next').textContent = paused ? '30분 넘게 멈춰 있으면 자동으로 끝나고 기록돼요'
-    : phase === 'focus' ? `다음: 휴식 ${cycles[ci].b}분` : `다음: 주기 ${n + 1} 집중 ${cycles[n].f}분`;
+    : phase === 'focus' ? `다음: 휴식에 몰입 ${cycles[ci].b}분` : `다음: 주기 ${n + 1} 몰입 ${cycles[n].f}분`;
   $('toggle').textContent = paused ? '계속하기' : '일시정지';
 }
 function pause() {
@@ -396,7 +396,7 @@ function pause() {
   autoEndTimer = setTimeout(() => {
     stop(true);
     $('next').textContent = `30분 넘게 멈춰 있어서 자동으로 끝냈어요 · ${$('next').textContent}`;
-    notify('공부를 자동으로 끝냈어요', '30분 넘게 일시정지 상태였어요.');
+    notify('몰입 세션을 자동으로 끝냈어요', '30분 넘게 일시정지 상태였어요.');
   }, AUTO_END);
   phaseText(); renderTick();
 }
@@ -410,13 +410,13 @@ function resume() {
 function nextPhase() {
   if (phase === 'focus') {
     focusMs += Date.now() - phaseStart; rounds++;
-    notify(`집중 ${cycles[ci].f}분 완료`, `휴식 ${cycles[ci].b}분을 시작합니다. 비트를 멈춥니다.`);
-    openReflect('break', `집중 ${cycles[ci].f}분을 지나왔어요`);
+    notify(`몰입 ${cycles[ci].f}분을 지나왔어요`, `이제 ${cycles[ci].b}분 동안 휴식에 몰입해요. 비트를 멈춥니다.`);
+    openReflect('break', `몰입 ${cycles[ci].f}분을 지나왔어요`);
     enterPhase(ci, 'break'); chime(false);
   } else {
     if (reflectMode === 'break') closeReflect(false); // 휴식 동안 답하지 않았으면 넘어감
     const n = (ci + 1) % cycles.length;
-    notify('휴식 끝', `주기 ${n + 1} · 집중 ${cycles[n].f}분을 시작합니다.`);
+    notify('휴식에 몰입한 시간이 끝났어요', `주기 ${n + 1} · 몰입 ${cycles[n].f}분을 시작합니다.`);
     enterPhase(n, 'focus'); chime(true);
   }
 }
@@ -470,7 +470,7 @@ async function openPip() {
   if (!('documentPictureInPicture' in window) || pip) return;
   try { pip = await documentPictureInPicture.requestWindow({ width: 260, height: 140 }); } catch { return; }
   const d = pip.document;
-  d.head.innerHTML = `<title>집중 드럼</title>
+  d.head.innerHTML = `<title>몰입 드럼</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
     <style>
       html{background:#000}
@@ -508,7 +508,7 @@ function updatePip() {
   d.getElementById('dial').ariaLabel = `남은 시간 ${Math.round(frac * 100)}%`;
   d.getElementById('ph').textContent = $('state').textContent;
   d.getElementById('left').textContent = running ? `${Math.ceil(left / 60000)}분 남음` : '대기 중';
-  d.getElementById('sum').textContent = `집중 ${$('focusSum').textContent}분`;
+  d.getElementById('sum').textContent = `몰입 ${$('focusSum').textContent}분`;
   d.getElementById('end').hidden = !running;
 }
 // 흐림: 검은 바탕 위 본문 불투명도를 낮춤 (창 자체 투명화는 브라우저가 지원하지 않음)
@@ -596,8 +596,8 @@ function renderLog() {
     <h3>${dayName(new Date(k))}<span>${hm(Math.floor(ss.reduce((a, s) => a + s.ms, 0) / 60000))}</span></h3>
     <ol>${ss.map(s => { const t = new Date(s.start);
       const extra = [s.attitude && `“${esc(s.attitude)}”`, avg(s.full) && `충만 ${avg(s.full)}`, avg(s.flow) && `몰입 ${avg(s.flow)}`, s.note && esc(s.note)].filter(Boolean).join(' · ');
-      return `<li class="rec"><div class="top"><span>${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.set ? `· ${esc(s.set)} ` : ''}${s.rounds != null ? `· 집중 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></div>${extra ? `<div class="att">${extra}</div>` : ''}</li>`;
-    }).join('')}</ol></section>`).join('') : '<p class="empty">1분 이상 공부하면 여기에 날짜별로 쌓입니다.</p>';
+      return `<li class="rec"><div class="top"><span>${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.set ? `· ${esc(s.set)} ` : ''}${s.rounds != null ? `· 몰입 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></div>${extra ? `<div class="att">${extra}</div>` : ''}</li>`;
+    }).join('')}</ol></section>`).join('') : '<p class="empty">1분 이상 몰입하면 여기에 날짜별로 쌓입니다.</p>';
 }
 
 async function lockScreen() { try { wake = await navigator.wakeLock?.request('screen'); } catch {} }
@@ -622,7 +622,7 @@ function renderTick() {
   const left = Math.max(0, phaseEnd - nowT()), t = fmt(left);
   $('timer').textContent = t; $('focusSum').textContent = Math.floor(focusNow() / 60000);
   $('dial').style.setProperty('--p', `${left / (phaseEnd - phaseStart) * 100}%`);
-  document.title = `${paused ? '⏸ ' : ''}${t} ${phase === 'focus' ? '집중' : '휴식'} · 집중 드럼`;
+  document.title = `${paused ? '⏸ ' : ''}${t} ${phase === 'focus' ? '몰입' : '휴식에 몰입'} · 몰입 드럼`;
   updatePip();
 }
 
@@ -637,14 +637,14 @@ function stop(auto) {
   if (ms >= 60000) {
     const list = load(); draftId = String(startAt);
     list.push({ id: draftId, start: startAt, ms, leaves, rounds, set: sets[active].name, attitude, draft: true }); save(list);
-    if (auto) finishDraft(''); else openReflect('end', `집중 ${Math.round(ms / 60000)}분, 이 세션을 돌아봐요`);
+    if (auto) finishDraft(''); else openReflect('end', `몰입 ${Math.round(ms / 60000)}분, 이 세션을 돌아봐요`);
   }
-  document.title = '집중 드럼';
+  document.title = '몰입 드럼';
   $('cycles').disabled = $('setPick').disabled = false; $('seq').hidden = true;
   document.querySelectorAll('.cyc').forEach(el => el.classList.remove('now'));
-  $('toggle').textContent = '공부 시작하기';
+  $('toggle').textContent = '몰입 시작하기';
   renderCycles(); renderLog();
-  $('next').textContent = ms >= 60000 ? `방금 집중 ${Math.round(ms / 60000)}분을 기록했어요` : '집중 1분 미만이라 기록하지 않았어요';
+  $('next').textContent = ms >= 60000 ? `방금 몰입 ${Math.round(ms / 60000)}분을 남겼어요` : '몰입 1분 미만이라 기록하지 않았어요';
   updatePip();
 }
 

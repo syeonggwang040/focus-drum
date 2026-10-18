@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
 <style>
-/* layout: 한 칸짜리 연습실 — 타이머 데크, 16스텝 시퀀서, 기록 리스트를 세로로 쌓음 */
+/* layout: 지금(다이얼·시작) / 설정 / 기록 세 구역을 세로로 쌓음 — 공부 중에는 '지금'만 보면 되도록 */
 :root{
   --bg:#eceef2; --panel:#f8f9fb; --fg:#1a1d26; --muted:#5d6475; --line:#d3d7e0;
   --accent:#d9481c; --step:#2a3a8f; --step-dim:#c7cde0;
@@ -25,24 +25,37 @@ body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-
 h1{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--muted)}
 h2{font-size:15px;margin:0}
 .deck{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;display:grid;gap:16px}
-.timer{font-family:var(--display);font-size:clamp(40px,12vw,64px);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
-.meta{font-family:var(--display);font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
-.meta b{color:var(--fg);font-weight:600}
-.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.stage{justify-items:center;text-align:center;gap:18px;padding-block:28px}
+.pick{border:0;margin:0;padding:0;min-width:0;display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+/* 뽀모도로 다이얼: 남은 시간만큼 색 링이 12시 방향으로 줄어듦 (눈금 12칸) */
+.dial{--c:var(--accent);width:min(280px,72vw);aspect-ratio:1;max-width:100%;border-radius:50%;position:relative;display:grid;place-items:center;
+  background:repeating-conic-gradient(var(--panel) 0 .7deg,transparent .7deg 30deg),conic-gradient(var(--c) 0 var(--p,100%),var(--step-dim) 0)}
+.dial[data-phase="break"]{--c:var(--step)}
+.dial[data-phase="idle"]{--c:color-mix(in srgb,var(--accent) 35%,var(--step-dim))}
+[hidden]{display:none!important}
+.face{position:absolute;inset:13%;border-radius:50%;background:var(--panel);display:grid;place-content:center;justify-items:center;gap:8px}
+.timer{font-family:var(--display);font-size:clamp(34px,10vw,50px);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
+.chip{font-size:13px;font-weight:600;padding:2px 12px;border-radius:999px;background:var(--step-dim);color:var(--fg)}
+.dial[data-phase="focus"] .chip{background:var(--accent);color:#fff}
+.dial[data-phase="break"] .chip{background:var(--step);color:var(--panel)}
+.status{margin:0;display:grid;gap:2px}
+#state{font-weight:600}
+#next{font-size:14px;color:var(--muted)}
 button{font:600 15px var(--body);border-radius:10px;padding:12px 20px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.big{width:min(100%,320px);padding:16px;font-size:17px;border-radius:14px}
 button:focus-visible,input:focus-visible{outline:2px solid var(--step);outline-offset:2px}
-.vol{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-left:auto}
-.vol input{width:110px;accent-color:var(--accent)}
-.dim{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
-.dim input{width:90px;accent-color:var(--step)}
-.seq{display:grid;gap:6px;overflow-x:auto}
-.row{display:grid;grid-template-columns:44px repeat(16,minmax(10px,1fr));gap:4px;align-items:center}
-.row span{font-family:var(--display);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-.cell{aspect-ratio:1;border-radius:3px;background:var(--step-dim);max-width:100%}
-.cell.beat{box-shadow:inset 0 0 0 1px var(--line)}
+.aux{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.stats{font-size:13px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-variant-numeric:tabular-nums}
+.stats b{color:var(--fg);font-weight:600}
+.sliders{display:flex;gap:12px 24px;flex-wrap:wrap}
+.sliders label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.sliders input{width:120px;accent-color:var(--accent)}
+.seq{display:grid;gap:3px;max-width:100%;overflow-x:auto}
+.row{display:grid;grid-template-columns:repeat(16,12px);gap:3px}
+.cell{width:12px;height:12px;border-radius:2px;background:var(--step-dim)}
 .cell.on{background:var(--step)}
-.cell.now{outline:2px solid var(--accent);outline-offset:1px}
+.cell.now{outline:1.5px solid var(--accent);outline-offset:1px}
 .log{display:grid;gap:10px}
 .log header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
 #today{font-family:var(--display);font-size:13px;color:var(--muted)}
@@ -51,11 +64,11 @@ li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bot
 li small{color:var(--muted)}
 .empty{color:var(--muted);font-size:14px}
 .cycles{border:0;margin:0;padding:0;display:grid;gap:8px;min-width:0}
-.cycles legend{font-size:13px;font-weight:600;padding:0;margin-bottom:8px}
-.cycles legend small{font-weight:400;color:var(--muted);margin-left:6px}
+.cycles legend{font-size:14px;font-weight:600;padding:0;margin-bottom:8px}
+.cycles legend small{font-weight:400;font-size:13px;color:var(--muted);margin-left:6px}
 .cycles:disabled{opacity:.75}
 .cyc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}
-.cyc .n{font-family:var(--display);font-size:12px;color:var(--muted);width:1.5em}
+.cyc .n{font-family:var(--display);font-size:13px;color:var(--muted);width:1.5em}
 .cyc.now .n{color:var(--accent);font-weight:600}
 .cyc input{width:4.5em;font:inherit;font-variant-numeric:tabular-nums;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
 .sets{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
@@ -70,24 +83,29 @@ button:disabled{cursor:default;opacity:.5}
 <body>
 <main class="wrap">
   <h1>집중 드럼</h1>
-  <section class="deck">
-    <div class="timer" id="timer">00:00:00</div>
-    <div class="meta"><span id="state">대기 중</span><span>집중 <b id="focusSum">0</b>분</span><span>템포 <b id="bpm">—</b> BPM</span><span>탭 이탈 <b id="leaves">0</b>회</span></div>
-    <div class="controls">
-      <button class="primary" id="toggle">공부 시작하기</button>
-      <button id="regen">새 비트</button>
-      <button id="pip" hidden>미니 창</button>
-      <label class="dim" id="pipDimWrap" for="pipDim" hidden>미니 창 선명도 <input id="pipDim" type="range" min="20" max="100" value="100"></label>
-      <label class="vol" for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
+  <section class="deck stage" aria-label="지금">
+    <fieldset class="pick" id="setPick" aria-label="공부할 세트"><div class="sets" id="setTabs" role="tablist"></div></fieldset>
+    <div class="dial" id="dial" data-phase="idle">
+      <div class="face"><div class="timer" id="timer">50:00</div><div class="chip" id="chip">준비</div></div>
+    </div>
+    <p class="status" aria-live="polite"><span id="state"></span><span id="next"></span></p>
+    <button class="primary big" id="toggle">공부 시작하기</button>
+    <div class="aux"><button class="small" id="regen">새 비트</button><button class="small" id="pip" hidden>미니 창</button></div>
+    <div class="stats"><span>집중 <b id="focusSum">0</b>분</span><span>탭 이탈 <b id="leaves">0</b>회</span><span><b id="bpm">—</b> BPM</span></div>
+    <div class="seq" id="seq" aria-label="현재 드럼 패턴" hidden></div>
+  </section>
+  <section class="deck" aria-label="설정">
+    <h2>설정</h2>
+    <div class="sliders">
+      <label for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
+      <label id="pipDimWrap" for="pipDim" hidden>미니 창 선명도 <input id="pipDim" type="range" min="20" max="100" value="100"></label>
     </div>
     <fieldset class="cycles" id="cycles">
-      <legend>주기 <small>세트 최대 3개 · 세트당 주기 최대 5개 · 10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
-      <div class="sets"><div class="sets" id="setTabs" role="tablist"></div><button type="button" class="small" id="addSet">+ 세트</button></div>
-      <div class="setname"><label for="setName">세트 이름</label><input id="setName" maxlength="20"><button type="button" class="small" id="delSet">세트 삭제</button></div>
+      <legend>선택한 세트의 주기 <small>10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
+      <div class="setname"><label for="setName">세트 이름</label><input id="setName" maxlength="20"><button type="button" class="small" id="addSet">+ 새 세트</button><button type="button" class="small" id="delSet">세트 삭제</button></div>
       <div id="cycleList"></div>
       <button type="button" class="small" id="addCycle">+ 주기 추가</button>
     </fieldset>
-    <div class="seq" id="seq" aria-label="현재 드럼 패턴"></div>
   </section>
   <section class="log">
     <header><h2>공부 기록</h2><span id="today">오늘 0분</span></header>
@@ -126,10 +144,9 @@ const cells = {};
 function buildGrid() {
   for (const k of ROWS) {
     const row = document.createElement('div'); row.className = 'row';
-    row.innerHTML = `<span>${k}</span>`;
     cells[k] = [];
     for (let i = 0; i < 16; i++) {
-      const c = document.createElement('div'); c.className = 'cell' + (i % 4 === 0 ? ' beat' : '');
+      const c = document.createElement('div'); c.className = 'cell';
       row.append(c); cells[k].push(c);
     }
     $('seq').append(row);
@@ -192,6 +209,7 @@ function renderSets() {
     b.onclick = () => { active = i; saveCycles(); renderSets(); };
     return b;
   }));
+  $('setPick').hidden = sets.length === 1;
   $('addSet').disabled = sets.length >= MAX_SETS;
   $('delSet').disabled = sets.length === 1;
   $('setName').value = sets[active].name;
@@ -211,7 +229,16 @@ function renderCycles() {
     <label for="b${i}">휴식 <input id="b${i}" data-k="b" type="number" min="10" max="60" step="10" value="${c.b}"> 분</label>
     <button type="button" class="small del" aria-label="주기 ${i + 1} 삭제" ${cycles.length === 1 ? 'disabled' : ''}>삭제</button></div>`).join('');
   $('addCycle').disabled = cycles.length >= MAX_CYCLES;
-  if (!running) $('timer').textContent = fmt(cycles[0].f * 60000);
+  if (!running) showIdle();
+}
+const hm = m => m >= 60 ? `${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}` : `${m}분`;
+// 대기 화면: 첫 집중 시간을 다이얼에, 고른 세트 요약을 아래에
+function showIdle() {
+  $('dial').dataset.phase = 'idle'; $('dial').style.setProperty('--p', '100%');
+  $('chip').textContent = '준비';
+  $('timer').textContent = fmt(cycles[0].f * 60000);
+  $('state').textContent = sets[active].name;
+  $('next').textContent = `주기 ${cycles.length}개 · 한 바퀴 ${hm(cycles.reduce((a, c) => a + c.f + c.b, 0))}`;
 }
 $('cycleList').addEventListener('change', e => {
   const k = e.target.dataset.k; if (!k) return;
@@ -234,7 +261,11 @@ function enterPhase(i, ph) {
   phaseTimer = setTimeout(nextPhase, phaseEnd - phaseStart);
   if (ph === 'focus') { newBeat(true); step = -1; bar = 0; Tone.Transport.start(); }
   else { Tone.Transport.stop(); step = -1; draw(); }
+  const n = (i + 1) % cycles.length;
+  $('dial').dataset.phase = ph; $('chip').textContent = ph === 'focus' ? '집중' : '휴식';
+  $('seq').hidden = ph !== 'focus';
   $('state').textContent = `주기 ${i + 1}/${cycles.length} · ${ph === 'focus' ? '집중' : '휴식'}`;
+  $('next').textContent = ph === 'focus' ? `다음: 휴식 ${cycles[i].b}분` : `다음: 주기 ${n + 1} 집중 ${cycles[n].f}분`;
   document.querySelectorAll('.cyc').forEach((el, j) => el.classList.toggle('now', j === i));
 }
 function nextPhase() {
@@ -294,7 +325,7 @@ function updatePip() {
 const DIM_KEY = 'focus-drum-pip-opacity';
 function applyDim() { if (pip) pip.document.body.style.opacity = $('pipDim').value / 100; }
 
-const fmt = ms => { const s = Math.floor(ms / 1000); return [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':'); };
+const fmt = ms => { const s = Math.ceil(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
 function save(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} }
 
@@ -316,12 +347,13 @@ async function start() {
   await Tone.start();
   kit ??= buildKit();
   running = true; startAt = Date.now(); leaves = 0; focusMs = 0; rounds = 0;
-  $('leaves').textContent = 0; $('focusSum').textContent = 0; $('cycles').disabled = true;
+  $('leaves').textContent = 0; $('focusSum').textContent = 0; $('cycles').disabled = $('setPick').disabled = true;
   enterPhase(0, 'focus');
   lockScreen();
   tick = setInterval(() => {
-    const t = fmt(Math.max(0, phaseEnd - Date.now()));
+    const left = Math.max(0, phaseEnd - Date.now()), t = fmt(left);
     $('timer').textContent = t; $('focusSum').textContent = Math.floor(focusNow() / 60000);
+    $('dial').style.setProperty('--p', `${left / (phaseEnd - phaseStart) * 100}%`);
     document.title = `${t} ${phase === 'focus' ? '집중' : '휴식'} · 집중 드럼`;
     updatePip();
   }, 250);
@@ -334,12 +366,13 @@ function stop() {
   Tone.Transport.stop(); step = -1; draw();
   wake?.release().catch(() => {}); wake = null;
   if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves, rounds, set: sets[active].name }); save(list); }
-  $('state').textContent = ms >= 60000 ? `집중 ${Math.round(ms / 60000)}분 기록됨` : '집중 1분 미만이라 기록하지 않았어요';
   document.title = '집중 드럼';
-  $('cycles').disabled = false;
+  $('cycles').disabled = $('setPick').disabled = false; $('seq').hidden = true;
   document.querySelectorAll('.cyc').forEach(el => el.classList.remove('now'));
   $('toggle').textContent = '공부 시작하기';
-  renderCycles(); renderLog(); updatePip();
+  renderCycles(); renderLog();
+  $('next').textContent = ms >= 60000 ? `방금 집중 ${Math.round(ms / 60000)}분을 기록했어요` : '집중 1분 미만이라 기록하지 않았어요';
+  updatePip();
 }
 
 $('toggle').onclick = () => running ? stop() : start();

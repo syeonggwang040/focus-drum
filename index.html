@@ -38,6 +38,9 @@ h2{font-size:15px;margin:0}
 .chip{font-size:13px;font-weight:600;padding:2px 12px;border-radius:999px;background:var(--step-dim);color:var(--fg)}
 .dial[data-phase="focus"] .chip{background:var(--accent);color:#fff}
 .dial[data-phase="break"] .chip{background:var(--step);color:var(--panel)}
+#end{justify-self:center}
+.dial.paused{--c:var(--muted)}
+.dial.paused .chip{background:var(--muted);color:var(--panel)}
 .status{margin:0;display:grid;gap:2px}
 #state{font-weight:600}
 #next{font-size:14px;color:var(--muted)}
@@ -137,6 +140,7 @@ button:disabled{cursor:default;opacity:.5}
     </div>
     <p class="status" aria-live="polite"><span id="state"></span><span id="next"></span></p>
     <button class="primary big" id="toggle">공부 시작하기</button>
+    <button class="small" id="end" hidden>끝내기</button>
     <div class="aux"><button class="small" id="regen">새 비트</button><button class="small" id="pip" hidden>미니 창</button></div>
     <div class="stats"><span>집중 <b id="focusSum">0</b>분</span><span>탭 이탈 <b id="leaves">0</b>회</span><span><b id="bpm">—</b> BPM</span></div>
     <div class="seq" id="seq" aria-label="현재 드럼 패턴" hidden></div>
@@ -183,6 +187,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 let sets, active = 0;
 let pat, bpm, step = -1, bar = 0, running = false, startAt = 0, leaves = 0, kit = null, wake = null, tick = null;
 let cycles, ci = 0, phase = 'focus', phaseStart = 0, phaseEnd = 0, phaseTimer = null, focusMs = 0, rounds = 0;
+let paused = false, pausedAt = 0, autoEndTimer = null;
+const AUTO_END = 30 * 60000; // 이만큼 멈춰 있으면 자동으로 끝내고 기록
+const nowT = () => paused ? pausedAt : Date.now(); // 일시정지 중에는 시간이 흐르지 않음
 
 // 로파이 힙합 감성의 16스텝 패턴을 확률로 생성 (값 = 세기 0~1)
 function generate() {
@@ -335,12 +342,37 @@ function enterPhase(i, ph) {
   phaseTimer = setTimeout(nextPhase, phaseEnd - phaseStart);
   if (ph === 'focus') { newBeat(true); step = -1; bar = 0; Tone.Transport.start(); }
   else { Tone.Transport.stop(); step = -1; draw(); }
-  const n = (i + 1) % cycles.length;
-  $('dial').dataset.phase = ph; $('chip').textContent = ph === 'focus' ? '집중' : '휴식';
+  $('dial').dataset.phase = ph;
   $('seq').hidden = ph !== 'focus';
-  $('state').textContent = `주기 ${i + 1}/${cycles.length} · ${ph === 'focus' ? '집중' : '휴식'}`;
-  $('next').textContent = ph === 'focus' ? `다음: 휴식 ${cycles[i].b}분` : `다음: 주기 ${n + 1} 집중 ${cycles[n].f}분`;
-  document.querySelectorAll('.cyc').forEach((el, j) => el.classList.toggle('now', j === i));
+  phaseText();
+  document.querySelectorAll('.cyc').forEach((el, j) => el.classList.toggle('now', j === ci));
+}
+function phaseText() {
+  const n = (ci + 1) % cycles.length, label = phase === 'focus' ? '집중' : '휴식';
+  $('dial').classList.toggle('paused', paused);
+  $('chip').textContent = paused ? '일시정지' : label;
+  $('state').textContent = `주기 ${ci + 1}/${cycles.length} · ${label}${paused ? ' · 일시정지' : ''}`;
+  $('next').textContent = paused ? '30분 넘게 멈춰 있으면 자동으로 끝나고 기록돼요'
+    : phase === 'focus' ? `다음: 휴식 ${cycles[ci].b}분` : `다음: 주기 ${n + 1} 집중 ${cycles[n].f}분`;
+  $('toggle').textContent = paused ? '계속하기' : '일시정지';
+}
+function pause() {
+  paused = true; pausedAt = Date.now();
+  clearTimeout(phaseTimer);
+  if (phase === 'focus') Tone.Transport.pause();
+  autoEndTimer = setTimeout(() => {
+    stop();
+    $('next').textContent = `30분 넘게 멈춰 있어서 자동으로 끝냈어요 · ${$('next').textContent}`;
+    notify('공부를 자동으로 끝냈어요', '30분 넘게 일시정지 상태였어요.');
+  }, AUTO_END);
+  phaseText(); renderTick();
+}
+function resume() {
+  const d = Date.now() - pausedAt;
+  phaseStart += d; phaseEnd += d; paused = false; clearTimeout(autoEndTimer);
+  phaseTimer = setTimeout(nextPhase, phaseEnd - Date.now());
+  if (phase === 'focus') Tone.Transport.start();
+  phaseText(); renderTick();
 }
 function nextPhase() {
   if (phase === 'focus') {
@@ -353,7 +385,7 @@ function nextPhase() {
     enterPhase(n, 'focus'); chime(true);
   }
 }
-const focusNow = () => focusMs + (phase === 'focus' ? Date.now() - phaseStart : 0);
+const focusNow = () => focusMs + (phase === 'focus' ? nowT() - phaseStart : 0);
 
 // 미니 창: Document Picture-in-Picture (Chrome·Edge 데스크톱 전용), 다른 창 위에 떠 있음
 let pip = null;
@@ -367,7 +399,8 @@ async function openPip() {
       html{background:#000}
       body{margin:0;height:100vh;box-sizing:border-box;padding:12px;display:flex;align-items:center;gap:14px;color:#e8eaf0;
         font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;font-size:13px;background:#1a1d26;--c:#5d6475}
-      body.focus{--c:#ff7a45} body.break{--c:#8fa2ff}
+      body.focus{--c:#ff7a45} body.break{--c:#8fa2ff} body.paused{--c:#9097a8}
+      .btns{display:flex;gap:6px;flex-wrap:wrap}
       /* 뽀모도로 다이얼: 남은 시간만큼 색 부채꼴이 12시 방향으로 줄어듦, 눈금 12칸 = 5분 간격 느낌 */
       #dial{flex:none;height:calc(100vh - 24px);max-height:220px;aspect-ratio:1;border-radius:50%;position:relative;
         background:repeating-conic-gradient(rgba(0,0,0,.35) 0 .6deg,transparent .6deg 30deg),conic-gradient(var(--c) 0 var(--p,100%),rgba(255,255,255,.1) 0)}
@@ -377,17 +410,20 @@ async function openPip() {
       button{justify-self:start;margin-top:6px;font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.4);background:transparent;color:inherit;cursor:pointer}
       [hidden]{display:none!important}
     </style>`;
-  d.body.innerHTML = `<div id="dial" role="img"></div><div class="side"><div id="ph"></div><div id="left"></div><div id="sum"></div><button id="end">끝내기</button></div>`;
+  d.body.innerHTML = `<div id="dial" role="img"></div><div class="side"><div id="ph"></div><div id="left"></div><div id="sum"></div><div class="btns"><button id="pp">일시정지</button><button id="end">끝내기</button></div></div>`;
   applyDim();
   d.getElementById('end').onclick = () => { if (running) stop(); };
+  d.getElementById('pp').onclick = () => { if (running) paused ? resume() : pause(); };
   pip.addEventListener('pagehide', () => { pip = null; });
   updatePip();
 }
 function updatePip() {
   if (!pip) return;
   const d = pip.document;
-  const left = Math.max(0, phaseEnd - Date.now()), frac = running ? left / (phaseEnd - phaseStart) : 1;
-  d.body.className = running ? phase : '';
+  const left = Math.max(0, phaseEnd - nowT()), frac = running ? left / (phaseEnd - phaseStart) : 1;
+  d.body.className = running ? (paused ? 'paused' : phase) : '';
+  d.getElementById('pp').hidden = !running;
+  d.getElementById('pp').textContent = paused ? '계속' : '일시정지';
   d.getElementById('dial').style.setProperty('--p', `${frac * 100}%`);
   d.getElementById('dial').ariaLabel = `남은 시간 ${Math.round(frac * 100)}%`;
   d.getElementById('ph').textContent = $('state').textContent;
@@ -490,23 +526,25 @@ async function start() {
   try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
   await Tone.start();
   kit ??= buildKit();
-  running = true; startAt = Date.now(); leaves = 0; focusMs = 0; rounds = 0;
+  running = true; paused = false; startAt = Date.now(); leaves = 0; focusMs = 0; rounds = 0;
   $('leaves').textContent = 0; $('focusSum').textContent = 0; $('cycles').disabled = $('setPick').disabled = true;
+  $('end').hidden = false;
   enterPhase(0, 'focus');
   lockScreen();
-  tick = setInterval(() => {
-    const left = Math.max(0, phaseEnd - Date.now()), t = fmt(left);
-    $('timer').textContent = t; $('focusSum').textContent = Math.floor(focusNow() / 60000);
-    $('dial').style.setProperty('--p', `${left / (phaseEnd - phaseStart) * 100}%`);
-    document.title = `${t} ${phase === 'focus' ? '집중' : '휴식'} · 집중 드럼`;
-    updatePip();
-  }, 250);
-  $('toggle').textContent = '공부 끝내기';
+  tick = setInterval(renderTick, 250);
+}
+function renderTick() {
+  const left = Math.max(0, phaseEnd - nowT()), t = fmt(left);
+  $('timer').textContent = t; $('focusSum').textContent = Math.floor(focusNow() / 60000);
+  $('dial').style.setProperty('--p', `${left / (phaseEnd - phaseStart) * 100}%`);
+  document.title = `${paused ? '⏸ ' : ''}${t} ${phase === 'focus' ? '집중' : '휴식'} · 집중 드럼`;
+  updatePip();
 }
 
 function stop() {
   const ms = focusNow();
-  running = false; clearInterval(tick); clearTimeout(phaseTimer);
+  running = false; paused = false; clearInterval(tick); clearTimeout(phaseTimer); clearTimeout(autoEndTimer);
+  $('dial').classList.remove('paused'); $('end').hidden = true;
   Tone.Transport.stop(); step = -1; draw();
   wake?.release().catch(() => {}); wake = null;
   if (ms >= 60000) { const list = load(); list.push({ id: String(startAt), start: startAt, ms, leaves, rounds, set: sets[active].name }); save(list); sync(); }
@@ -519,11 +557,13 @@ function stop() {
   updatePip();
 }
 
-$('toggle').onclick = () => running ? stop() : start();
-// 스페이스바로 시작·끝내기 (입력칸·버튼·접기 제목에 포커스가 있으면 그쪽 동작 우선)
+const primary = () => !running ? start() : paused ? resume() : pause();
+$('toggle').onclick = primary;
+$('end').onclick = () => { if (running) stop(); };
+// 스페이스바: 대기 중엔 시작, 공부 중엔 일시정지·계속 (입력칸·버튼·접기 제목에 포커스가 있으면 그쪽 동작 우선)
 document.addEventListener('keydown', e => {
   if (e.code !== 'Space' || e.repeat || e.target.closest?.('input, button, summary, textarea, [tabindex]')) return;
-  e.preventDefault(); running ? stop() : start();
+  e.preventDefault(); primary();
 });
 $('regen').onclick = () => newBeat(true);
 $('pip').hidden = !('documentPictureInPicture' in window);
@@ -534,7 +574,7 @@ $('pipDim').oninput = e => { applyDim(); try { localStorage.setItem(DIM_KEY, e.t
 $('vol').oninput = e => { if (kit) kit.vol.volume.value = +e.target.value; };
 document.addEventListener('visibilitychange', () => {
   if (!running) return;
-  if (document.hidden) { if (phase === 'focus') $('leaves').textContent = ++leaves; } // 휴식 중 이탈은 세지 않음
+  if (document.hidden) { if (phase === 'focus' && !paused) $('leaves').textContent = ++leaves; } // 휴식·일시정지 중 이탈은 세지 않음
   else lockScreen(); // 탭 복귀 시 화면 꺼짐 방지 재요청
 });
 

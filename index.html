@@ -70,6 +70,7 @@ button:disabled{cursor:default;opacity:.5}
     <div class="controls">
       <button class="primary" id="toggle">공부 시작하기</button>
       <button id="regen">새 비트</button>
+      <button id="pip" hidden>미니 창</button>
       <label class="vol" for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
     </div>
     <fieldset class="cycles" id="cycles">
@@ -211,6 +212,39 @@ function nextPhase() {
 }
 const focusNow = () => focusMs + (phase === 'focus' ? Date.now() - phaseStart : 0);
 
+// 미니 창: Document Picture-in-Picture (Chrome·Edge 데스크톱 전용), 다른 창 위에 떠 있음
+let pip = null;
+async function openPip() {
+  if (!('documentPictureInPicture' in window) || pip) return;
+  try { pip = await documentPictureInPicture.requestWindow({ width: 260, height: 140 }); } catch { return; }
+  const d = pip.document;
+  d.head.innerHTML = `<title>집중 드럼</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+    <style>
+      body{margin:0;height:100vh;box-sizing:border-box;padding:12px 16px;display:grid;align-content:center;gap:4px;color:#fff;
+        font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;background:#1a1d26;transition:background .3s}
+      body.focus{background:#d9481c} body.break{background:#2a3a8f}
+      #ph{font-size:13px;opacity:.85}
+      #t{font-family:"Martian Mono",ui-monospace,Consolas,monospace;font-weight:600;font-size:clamp(28px,16vw,56px);line-height:1.1;font-variant-numeric:tabular-nums}
+      .row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+      button{font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;cursor:pointer}
+      [hidden]{display:none!important}
+    </style>`;
+  d.body.innerHTML = `<div id="ph"></div><div id="t"></div><div class="row"><span id="sum"></span><button id="end">끝내기</button></div>`;
+  d.getElementById('end').onclick = () => { if (running) stop(); };
+  pip.addEventListener('pagehide', () => { pip = null; });
+  updatePip();
+}
+function updatePip() {
+  if (!pip) return;
+  const d = pip.document;
+  d.body.className = running ? phase : '';
+  d.getElementById('ph').textContent = $('state').textContent;
+  d.getElementById('t').textContent = $('timer').textContent;
+  d.getElementById('sum').textContent = `집중 ${$('focusSum').textContent}분`;
+  d.getElementById('end').hidden = !running;
+}
+
 const fmt = ms => { const s = Math.floor(ms / 1000); return [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':'); };
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
 function save(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} }
@@ -228,6 +262,7 @@ function renderLog() {
 async function lockScreen() { try { wake = await navigator.wakeLock?.request('screen'); } catch {} }
 
 async function start() {
+  openPip(); // 클릭 직후에 호출해야 브라우저가 창을 열어 줌
   try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
   await Tone.start();
   kit ??= buildKit();
@@ -239,6 +274,7 @@ async function start() {
     const t = fmt(Math.max(0, phaseEnd - Date.now()));
     $('timer').textContent = t; $('focusSum').textContent = Math.floor(focusNow() / 60000);
     document.title = `${t} ${phase === 'focus' ? '집중' : '휴식'} · 집중 드럼`;
+    updatePip();
   }, 250);
   $('toggle').textContent = '공부 끝내기';
 }
@@ -254,11 +290,13 @@ function stop() {
   $('cycles').disabled = false;
   document.querySelectorAll('.cyc').forEach(el => el.classList.remove('now'));
   $('toggle').textContent = '공부 시작하기';
-  renderCycles(); renderLog();
+  renderCycles(); renderLog(); updatePip();
 }
 
 $('toggle').onclick = () => running ? stop() : start();
 $('regen').onclick = () => newBeat(true);
+$('pip').hidden = !('documentPictureInPicture' in window);
+$('pip').onclick = openPip;
 $('vol').oninput = e => { if (kit) kit.vol.volume.value = +e.target.value; };
 document.addEventListener('visibilitychange', () => {
   if (!running) return;

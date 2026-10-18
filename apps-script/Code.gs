@@ -8,6 +8,7 @@
 const PIN = '000';          // 숫자 3자리로 바꾸세요
 const SHEET_NAME = '기록';
 const MAX_FAILS = 10;       // 1시간에 틀린 PIN이 이만큼 쌓이면 1시간 잠금
+const COLS = ['시작 시각', '집중(분)', '세트', '집중 횟수', '탭 이탈', 'id', '태도', '충만', '몰입', '돌아봄'];
 
 function doPost(e) {
   let body;
@@ -24,18 +25,24 @@ function doPost(e) {
       const ids = new Set(last > 1 ? sheet.getRange(2, 6, last - 1, 1).getValues().map(r => String(r[0])) : []);
       const rows = (body.sessions || [])
         .filter(s => !ids.has(String(s.id)))
-        .map(s => [new Date(s.start), Math.round(s.ms / 6000) / 10, s.set || '', s.rounds ?? '', s.leaves ?? 0, String(s.id)]);
-      if (rows.length) sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 6).setValues(rows);
+        .map(s => [new Date(s.start), Math.round(s.ms / 6000) / 10, s.set || '', s.rounds ?? '', s.leaves ?? 0, String(s.id),
+          s.attitude || '', s.full || '', s.flow || '', s.note || '']);
+      if (rows.length) {
+        const at = sheet.getLastRow() + 1;
+        sheet.getRange(at, 6, rows.length, 5).setNumberFormat('@'); // id·태도·충만·몰입·돌아봄은 글자 그대로 ("4,5"가 숫자 45로 바뀌지 않게)
+        sheet.getRange(at, 1, rows.length, COLS.length).setValues(rows);
+      }
       return out_({ ok: true, added: rows.length });
     } finally { lock.releaseLock(); }
   }
   if (body.action === 'list') {
     const last = sheet.getLastRow();
-    const rows = last > 1 ? sheet.getRange(2, 1, last - 1, 6).getValues() : [];
+    const rows = last > 1 ? sheet.getRange(2, 1, last - 1, COLS.length).getValues() : [];
     return out_({
       sessions: rows.filter(r => r[0] && r[1] !== '').map(r => ({
         start: new Date(r[0]).getTime(), ms: Math.round(Number(r[1]) * 60000), set: String(r[2]),
         rounds: r[3] === '' ? null : Number(r[3]), leaves: Number(r[4]) || 0, id: String(r[5] || new Date(r[0]).getTime()),
+        attitude: String(r[6]), full: String(r[7]), flow: String(r[8]), note: String(r[9]),
       })),
     });
   }
@@ -57,9 +64,10 @@ function sheet_() {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(['시작 시각', '집중(분)', '세트', '집중 횟수', '탭 이탈', 'id']);
     sheet.setFrozenRows(1);
   }
+  // 머리글이 없거나 예전 6열짜리면 새 열 이름으로 채움 (기존 기록은 그대로)
+  sheet.getRange(1, 1, 1, COLS.length).setValues([COLS]);
   return sheet;
 }
 

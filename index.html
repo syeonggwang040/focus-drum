@@ -58,6 +58,10 @@ li small{color:var(--muted)}
 .cyc .n{font-family:var(--display);font-size:12px;color:var(--muted);width:1.5em}
 .cyc.now .n{color:var(--accent);font-weight:600}
 .cyc input{width:4.5em;font:inherit;font-variant-numeric:tabular-nums;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.sets{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tab[aria-selected="true"]{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.setname{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.setname input{font:inherit;color:var(--fg);padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);width:12em;max-width:100%}
 button.small{padding:4px 10px;font-size:13px;font-weight:400;justify-self:start}
 button:disabled{cursor:default;opacity:.5}
 @media (prefers-reduced-motion:reduce){.cell{transition:none}}
@@ -77,7 +81,9 @@ button:disabled{cursor:default;opacity:.5}
       <label class="vol" for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
     </div>
     <fieldset class="cycles" id="cycles">
-      <legend>주기 <small>최대 5개 · 10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
+      <legend>주기 <small>세트 최대 3개 · 세트당 주기 최대 5개 · 10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
+      <div class="sets"><div class="sets" id="setTabs" role="tablist"></div><button type="button" class="small" id="addSet">+ 세트</button></div>
+      <div class="setname"><label for="setName">세트 이름</label><input id="setName" maxlength="20"><button type="button" class="small" id="delSet">세트 삭제</button></div>
       <div id="cycleList"></div>
       <button type="button" class="small" id="addCycle">+ 주기 추가</button>
     </fieldset>
@@ -92,7 +98,10 @@ button:disabled{cursor:default;opacity:.5}
 <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
 <script>
 const ROWS = ['kick', 'snare', 'hat'], KEY = 'focus-drum-sessions', CYCLE_KEY = 'focus-drum-cycles', MAX_CYCLES = 5;
+const SET_KEY = 'focus-drum-sets', ACTIVE_KEY = 'focus-drum-active-set', MAX_SETS = 3;
 const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+let sets, active = 0;
 let pat, bpm, step = -1, bar = 0, running = false, startAt = 0, leaves = 0, kit = null, wake = null, tick = null;
 let cycles, ci = 0, phase = 'focus', phaseStart = 0, phaseEnd = 0, phaseTimer = null, focusMs = 0, rounds = 0;
 
@@ -167,7 +176,33 @@ function loadCycles() {
   try { const c = JSON.parse(localStorage.getItem(CYCLE_KEY)); if (Array.isArray(c) && c.length) return c.slice(0, MAX_CYCLES); } catch {}
   return [{ f: 50, b: 10 }];
 }
-function saveCycles() { try { localStorage.setItem(CYCLE_KEY, JSON.stringify(cycles)); } catch {} }
+// 세트: [{name, cycles}] — 예전 단일 주기 설정은 '세트 1'로 옮겨 옴
+function loadSets() {
+  try { const s = JSON.parse(localStorage.getItem(SET_KEY)); if (Array.isArray(s) && s.length) return s.slice(0, MAX_SETS); } catch {}
+  return [{ name: '세트 1', cycles: loadCycles() }];
+}
+function saveCycles() { try { localStorage.setItem(SET_KEY, JSON.stringify(sets)); localStorage.setItem(ACTIVE_KEY, active); } catch {} }
+
+function renderSets() {
+  cycles = sets[active].cycles;
+  $('setTabs').replaceChildren(...sets.map((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'small tab'; b.textContent = s.name;
+    b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', i === active);
+    b.onclick = () => { active = i; saveCycles(); renderSets(); };
+    return b;
+  }));
+  $('addSet').disabled = sets.length >= MAX_SETS;
+  $('delSet').disabled = sets.length === 1;
+  $('setName').value = sets[active].name;
+  renderCycles();
+}
+$('addSet').onclick = () => { sets.push({ name: `세트 ${sets.length + 1}`, cycles: [{ f: 50, b: 10 }] }); active = sets.length - 1; saveCycles(); renderSets(); };
+$('delSet').onclick = () => { sets.splice(active, 1); active = Math.max(0, active - 1); saveCycles(); renderSets(); };
+$('setName').oninput = e => {
+  sets[active].name = e.target.value.trim() || `세트 ${active + 1}`;
+  $('setTabs').children[active].textContent = sets[active].name; saveCycles();
+};
 const snap = (v, max, fallback) => Number.isFinite(v) ? Math.min(max, Math.max(10, Math.round(v / 10) * 10)) : fallback;
 
 function renderCycles() {
@@ -269,7 +304,7 @@ function renderLog() {
   $('today').textContent = `오늘 ${Math.floor(mins)}분`;
   $('list').innerHTML = list.length ? list.slice(-10).reverse().map(s => {
     const d = new Date(s.start);
-    return `<li><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.rounds != null ? `· 집중 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></li>`;
+    return `<li><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.set ? `· ${esc(s.set)} ` : ''}${s.rounds != null ? `· 집중 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></li>`;
   }).join('') : '<li class="empty">1분 이상 공부하면 여기에 쌓입니다.</li>';
 }
 
@@ -298,7 +333,7 @@ function stop() {
   running = false; clearInterval(tick); clearTimeout(phaseTimer);
   Tone.Transport.stop(); step = -1; draw();
   wake?.release().catch(() => {}); wake = null;
-  if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves, rounds }); save(list); }
+  if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves, rounds, set: sets[active].name }); save(list); }
   $('state').textContent = ms >= 60000 ? `집중 ${Math.round(ms / 60000)}분 기록됨` : '집중 1분 미만이라 기록하지 않았어요';
   document.title = '집중 드럼';
   $('cycles').disabled = false;
@@ -321,8 +356,9 @@ document.addEventListener('visibilitychange', () => {
   else lockScreen(); // 탭 복귀 시 화면 꺼짐 방지 재요청
 });
 
-cycles = loadCycles();
-buildGrid(); newBeat(true); renderCycles(); renderLog();
+sets = loadSets();
+try { active = Math.min(+localStorage.getItem(ACTIVE_KEY) || 0, sets.length - 1); } catch {}
+buildGrid(); newBeat(true); renderSets(); renderLog();
 </script>
 </body>
 </html>

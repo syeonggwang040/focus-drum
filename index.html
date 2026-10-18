@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>집중 드럼</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
@@ -44,6 +44,11 @@ h2{font-size:15px;margin:0}
 button{font:600 15px var(--body);border-radius:10px;padding:12px 20px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button.big{width:min(100%,320px);padding:16px;font-size:17px;border-radius:14px}
+/* 모바일: 시작 버튼을 엄지가 닿는 화면 하단에 고정 */
+@media (max-width:600px){
+  button.big{position:fixed;left:16px;right:16px;bottom:calc(12px + env(safe-area-inset-bottom,0px));width:auto;z-index:5;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  .wrap{padding-bottom:110px}
+}
 button:focus-visible,input:focus-visible{outline:2px solid var(--step);outline-offset:2px}
 .aux{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .stats{font-size:13px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-variant-numeric:tabular-nums}
@@ -56,9 +61,28 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--step);outline-o
 .cell{width:12px;height:12px;border-radius:2px;background:var(--step-dim)}
 .cell.on{background:var(--step)}
 .cell.now{outline:1.5px solid var(--accent);outline-offset:1px}
-.log{display:grid;gap:10px}
-.log header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-#today{font-family:var(--display);font-size:13px;color:var(--muted)}
+.log{display:grid;gap:16px}
+.summary{display:flex;gap:32px;align-items:flex-end;flex-wrap:wrap}
+.summary>div{display:grid;gap:2px}
+.big-num{font-family:var(--display);font-size:40px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.big-num small{font-family:var(--body);font-size:16px;margin-left:4px}
+.mid-num{font-family:var(--display);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.cap{font-size:13px;color:var(--muted)}
+/* 최근 7일 막대: 단일 계열(집중 분), 오늘만 진하게 + 값 라벨, 나머지는 툴팁 */
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.day{position:relative;display:grid;gap:6px;justify-items:center;border-radius:6px;outline-offset:2px}
+.col{height:96px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;border-bottom:1px solid var(--line)}
+.bar{width:min(28px,70%);border-radius:4px 4px 0 0;background:color-mix(in srgb,var(--accent) 55%,var(--panel))}
+.today .bar{background:var(--accent)}
+.v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.d{font-size:13px;color:var(--muted)} .today .d{color:var(--fg);font-weight:600}
+.day:hover::before,.day:focus-visible::before{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);
+  white-space:nowrap;background:var(--fg);color:var(--bg);font-size:13px;padding:3px 8px;border-radius:6px;z-index:2;pointer-events:none}
+.day.l::before{left:0;transform:none} .day.r::before{left:auto;right:0;transform:none}
+.day:focus-visible{outline:2px solid var(--step)}
+#list{display:grid;gap:16px}
+#list h3{display:flex;justify-content:space-between;font-size:14px;margin:0 0 4px}
+#list h3 span{font-weight:400;color:var(--muted);font-variant-numeric:tabular-nums}
 ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
 li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 li small{color:var(--muted)}
@@ -127,8 +151,13 @@ button:disabled{cursor:default;opacity:.5}
     </div>
   </details>
   <section class="log">
-    <header><h2>공부 기록</h2><span id="today">오늘 0분</span></header>
-    <ol id="list"></ol>
+    <h2>공부 기록</h2>
+    <div class="summary">
+      <div><span class="big-num"><span id="todayMin">0</span><small>분</small></span><span class="cap">오늘 집중</span></div>
+      <div><span class="mid-num" id="weekMin">0분</span><span class="cap">최근 7일 합계</span></div>
+    </div>
+    <div class="week" id="week" role="list" aria-label="최근 7일 집중 시간"></div>
+    <div id="list"></div>
   </section>
 </main>
 
@@ -361,14 +390,34 @@ const fmt = ms => { const s = Math.ceil(ms / 1000); return `${String(Math.floor(
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
 function save(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} }
 
+const DAY = ['일', '월', '화', '수', '목', '금', '토'];
+const dayKey = t => new Date(t).toDateString();
+const dayName = d => `${d.getMonth() + 1}/${d.getDate()} (${DAY[d.getDay()]})`;
 function renderLog() {
-  const list = load(), today = new Date().toDateString();
-  const mins = list.filter(s => new Date(s.start).toDateString() === today).reduce((a, s) => a + s.ms, 0) / 60000;
-  $('today').textContent = `오늘 ${Math.floor(mins)}분`;
-  $('list').innerHTML = list.length ? list.slice(-10).reverse().map(s => {
-    const d = new Date(s.start);
-    return `<li><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.set ? `· ${esc(s.set)} ` : ''}${s.rounds != null ? `· 집중 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></li>`;
-  }).join('') : '<li class="empty">1분 이상 공부하면 여기에 쌓입니다.</li>';
+  const list = load(), byDay = {};
+  for (const s of list) byDay[dayKey(s.start)] = (byDay[dayKey(s.start)] || 0) + s.ms;
+  // 오늘 포함 최근 7일, 기록 없는 날은 0
+  const days = [...Array(7)].map((_, i) => {
+    const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - 6 + i);
+    return { d, min: Math.floor((byDay[d.toDateString()] || 0) / 60000) };
+  });
+  const max = Math.max(1, ...days.map(x => x.min));
+  $('todayMin').textContent = days[6].min;
+  $('weekMin').textContent = hm(days.reduce((a, x) => a + x.min, 0));
+  $('week').innerHTML = days.map((x, i) => {
+    const tip = `${dayName(x.d)} · ${hm(x.min)}`, side = i < 2 ? ' l' : i > 4 ? ' r' : '';
+    return `<div class="day${side}${i === 6 ? ' today' : ''}" role="listitem" tabindex="0" aria-label="${tip}" data-tip="${tip}">
+      <div class="col">${i === 6 && x.min ? `<span class="v">${hm(x.min)}</span>` : ''}<div class="bar" style="height:${x.min ? Math.max(4, x.min / max * 80) : 0}px"></div></div>
+      <span class="d">${i === 6 ? '오늘' : DAY[x.d.getDay()]}</span></div>`;
+  }).join('');
+  // 최근 20건을 날짜별로 묶음
+  const groups = new Map();
+  for (const s of list.slice(-20).reverse()) { const k = dayKey(s.start); groups.has(k) ? groups.get(k).push(s) : groups.set(k, [s]); }
+  $('list').innerHTML = groups.size ? [...groups].map(([k, ss]) => `<section>
+    <h3>${dayName(new Date(k))}<span>${hm(Math.floor(ss.reduce((a, s) => a + s.ms, 0) / 60000))}</span></h3>
+    <ol>${ss.map(s => { const t = new Date(s.start);
+      return `<li><span>${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.set ? `· ${esc(s.set)} ` : ''}${s.rounds != null ? `· 집중 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></li>`;
+    }).join('')}</ol></section>`).join('') : '<p class="empty">1분 이상 공부하면 여기에 날짜별로 쌓입니다.</p>';
 }
 
 async function lockScreen() { try { wake = await navigator.wakeLock?.request('screen'); } catch {} }
@@ -408,6 +457,11 @@ function stop() {
 }
 
 $('toggle').onclick = () => running ? stop() : start();
+// 스페이스바로 시작·끝내기 (입력칸·버튼·접기 제목에 포커스가 있으면 그쪽 동작 우선)
+document.addEventListener('keydown', e => {
+  if (e.code !== 'Space' || e.repeat || e.target.closest?.('input, button, summary, textarea, [tabindex]')) return;
+  e.preventDefault(); running ? stop() : start();
+});
 $('regen').onclick = () => newBeat(true);
 $('pip').hidden = !('documentPictureInPicture' in window);
 $('pip').onclick = openPip;

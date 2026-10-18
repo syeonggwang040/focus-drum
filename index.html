@@ -34,6 +34,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button:focus-visible,input:focus-visible{outline:2px solid var(--step);outline-offset:2px}
 .vol{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-left:auto}
 .vol input{width:110px;accent-color:var(--accent)}
+.dim{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.dim input{width:90px;accent-color:var(--step)}
 .seq{display:grid;gap:6px;overflow-x:auto}
 .row{display:grid;grid-template-columns:44px repeat(16,minmax(10px,1fr));gap:4px;align-items:center}
 .row span{font-family:var(--display);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
@@ -71,6 +73,7 @@ button:disabled{cursor:default;opacity:.5}
       <button class="primary" id="toggle">공부 시작하기</button>
       <button id="regen">새 비트</button>
       <button id="pip" hidden>미니 창</button>
+      <label class="dim" id="pipDimWrap" for="pipDim" hidden>미니 창 선명도 <input id="pipDim" type="range" min="20" max="100" value="100"></label>
       <label class="vol" for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
     </div>
     <fieldset class="cycles" id="cycles">
@@ -221,16 +224,21 @@ async function openPip() {
   d.head.innerHTML = `<title>집중 드럼</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
     <style>
-      body{margin:0;height:100vh;box-sizing:border-box;padding:12px 16px;display:grid;align-content:center;gap:4px;color:#fff;
-        font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;background:#1a1d26;transition:background .3s}
-      body.focus{background:#d9481c} body.break{background:#2a3a8f}
-      #ph{font-size:13px;opacity:.85}
-      #t{font-family:"Martian Mono",ui-monospace,Consolas,monospace;font-weight:600;font-size:clamp(28px,16vw,56px);line-height:1.1;font-variant-numeric:tabular-nums}
-      .row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
-      button{font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;cursor:pointer}
+      html{background:#000}
+      body{margin:0;height:100vh;box-sizing:border-box;padding:12px;display:flex;align-items:center;gap:14px;color:#e8eaf0;
+        font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;font-size:13px;background:#1a1d26;--c:#5d6475}
+      body.focus{--c:#ff7a45} body.break{--c:#8fa2ff}
+      /* 뽀모도로 다이얼: 남은 시간만큼 색 부채꼴이 12시 방향으로 줄어듦, 눈금 12칸 = 5분 간격 느낌 */
+      #dial{flex:none;height:calc(100vh - 24px);max-height:220px;aspect-ratio:1;border-radius:50%;position:relative;
+        background:repeating-conic-gradient(rgba(0,0,0,.35) 0 .6deg,transparent .6deg 30deg),conic-gradient(var(--c) 0 var(--p,100%),rgba(255,255,255,.1) 0)}
+      #dial::after{content:"";position:absolute;inset:44%;border-radius:50%;background:#1a1d26}
+      .side{display:grid;gap:2px;min-width:0}
+      #ph{opacity:.7} #left{font-weight:600;font-size:18px;color:var(--c)} #sum{opacity:.7}
+      button{justify-self:start;margin-top:6px;font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.4);background:transparent;color:inherit;cursor:pointer}
       [hidden]{display:none!important}
     </style>`;
-  d.body.innerHTML = `<div id="ph"></div><div id="t"></div><div class="row"><span id="sum"></span><button id="end">끝내기</button></div>`;
+  d.body.innerHTML = `<div id="dial" role="img"></div><div class="side"><div id="ph"></div><div id="left"></div><div id="sum"></div><button id="end">끝내기</button></div>`;
+  applyDim();
   d.getElementById('end').onclick = () => { if (running) stop(); };
   pip.addEventListener('pagehide', () => { pip = null; });
   updatePip();
@@ -238,12 +246,18 @@ async function openPip() {
 function updatePip() {
   if (!pip) return;
   const d = pip.document;
+  const left = Math.max(0, phaseEnd - Date.now()), frac = running ? left / (phaseEnd - phaseStart) : 1;
   d.body.className = running ? phase : '';
+  d.getElementById('dial').style.setProperty('--p', `${frac * 100}%`);
+  d.getElementById('dial').ariaLabel = `남은 시간 ${Math.round(frac * 100)}%`;
   d.getElementById('ph').textContent = $('state').textContent;
-  d.getElementById('t').textContent = $('timer').textContent;
+  d.getElementById('left').textContent = running ? `${Math.ceil(left / 60000)}분 남음` : '대기 중';
   d.getElementById('sum').textContent = `집중 ${$('focusSum').textContent}분`;
   d.getElementById('end').hidden = !running;
 }
+// 흐림: 검은 바탕 위 본문 불투명도를 낮춤 (창 자체 투명화는 브라우저가 지원하지 않음)
+const DIM_KEY = 'focus-drum-pip-opacity';
+function applyDim() { if (pip) pip.document.body.style.opacity = $('pipDim').value / 100; }
 
 const fmt = ms => { const s = Math.floor(ms / 1000); return [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':'); };
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
@@ -297,6 +311,9 @@ $('toggle').onclick = () => running ? stop() : start();
 $('regen').onclick = () => newBeat(true);
 $('pip').hidden = !('documentPictureInPicture' in window);
 $('pip').onclick = openPip;
+$('pipDimWrap').hidden = $('pip').hidden;
+try { $('pipDim').value = localStorage.getItem(DIM_KEY) ?? 100; } catch {}
+$('pipDim').oninput = e => { applyDim(); try { localStorage.setItem(DIM_KEY, e.target.value); } catch {} };
 $('vol').oninput = e => { if (kit) kit.vol.volume.value = +e.target.value; };
 document.addEventListener('visibilitychange', () => {
   if (!running) return;

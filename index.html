@@ -48,6 +48,16 @@ ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
 li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 li small{color:var(--muted)}
 .empty{color:var(--muted);font-size:14px}
+.cycles{border:0;margin:0;padding:0;display:grid;gap:8px;min-width:0}
+.cycles legend{font-size:13px;font-weight:600;padding:0;margin-bottom:8px}
+.cycles legend small{font-weight:400;color:var(--muted);margin-left:6px}
+.cycles:disabled{opacity:.75}
+.cyc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}
+.cyc .n{font-family:var(--display);font-size:12px;color:var(--muted);width:1.5em}
+.cyc.now .n{color:var(--accent);font-weight:600}
+.cyc input{width:4.5em;font:inherit;font-variant-numeric:tabular-nums;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+button.small{padding:4px 10px;font-size:13px;font-weight:400;justify-self:start}
+button:disabled{cursor:default;opacity:.5}
 @media (prefers-reduced-motion:reduce){.cell{transition:none}}
 </style>
 </head>
@@ -56,12 +66,17 @@ li small{color:var(--muted)}
   <h1>집중 드럼</h1>
   <section class="deck">
     <div class="timer" id="timer">00:00:00</div>
-    <div class="meta"><span>템포 <b id="bpm">—</b> BPM</span><span>탭 이탈 <b id="leaves">0</b>회</span><span id="state">대기 중</span></div>
+    <div class="meta"><span id="state">대기 중</span><span>집중 <b id="focusSum">0</b>분</span><span>템포 <b id="bpm">—</b> BPM</span><span>탭 이탈 <b id="leaves">0</b>회</span></div>
     <div class="controls">
       <button class="primary" id="toggle">공부 시작하기</button>
       <button id="regen">새 비트</button>
       <label class="vol" for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
     </div>
+    <fieldset class="cycles" id="cycles">
+      <legend>주기 <small>최대 5개 · 10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
+      <div id="cycleList"></div>
+      <button type="button" class="small" id="addCycle">+ 주기 추가</button>
+    </fieldset>
     <div class="seq" id="seq" aria-label="현재 드럼 패턴"></div>
   </section>
   <section class="log">
@@ -72,9 +87,10 @@ li small{color:var(--muted)}
 
 <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
 <script>
-const ROWS = ['kick', 'snare', 'hat'], KEY = 'focus-drum-sessions';
+const ROWS = ['kick', 'snare', 'hat'], KEY = 'focus-drum-sessions', CYCLE_KEY = 'focus-drum-cycles', MAX_CYCLES = 5;
 const $ = id => document.getElementById(id);
 let pat, bpm, step = -1, bar = 0, running = false, startAt = 0, leaves = 0, kit = null, wake = null, tick = null;
+let cycles, ci = 0, phase = 'focus', phaseStart = 0, phaseEnd = 0, phaseTimer = null, focusMs = 0, rounds = 0;
 
 // 로파이 힙합 감성의 16스텝 패턴을 확률로 생성 (값 = 세기 0~1)
 function generate() {
@@ -120,6 +136,7 @@ function buildKit() {
   const snare = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: .001, decay: .18, sustain: 0 } }).connect(new Tone.Filter(1800, 'bandpass').connect(vol));
   const hat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: .001, decay: .04, sustain: 0 } }).connect(new Tone.Filter(7000, 'highpass').connect(vol));
   hat.volume.value = -10;
+  const bell = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: .005, decay: .4, sustain: 0, release: .4 } }).connect(vol);
   Tone.Transport.swing = .15; Tone.Transport.swingSubdivision = '16n';
   Tone.Transport.scheduleRepeat(time => {
     step = (step + 1) % 16;
@@ -129,8 +146,70 @@ function buildKit() {
     if (pat.hat[step]) hat.triggerAttackRelease('32n', time, pat.hat[step]);
     Tone.Draw.schedule(draw, time);
   }, '16n');
-  return { vol };
+  return { vol, bell };
 }
+
+// 구간 전환 신호음: 집중 시작은 올라가는 두 음, 휴식 시작은 내려가는 두 음
+function chime(up) {
+  const t = Tone.now(), [a, b] = up ? ['E5', 'A5'] : ['A5', 'E5'];
+  kit.bell.triggerAttackRelease(a, '8n', t); kit.bell.triggerAttackRelease(b, '8n', t + .25);
+}
+function notify(title, body) {
+  try { if (Notification.permission === 'granted') new Notification(title, { body }); } catch {}
+}
+
+// 주기 설정: [{f: 집중분, b: 휴식분}], 10분 단위
+function loadCycles() {
+  try { const c = JSON.parse(localStorage.getItem(CYCLE_KEY)); if (Array.isArray(c) && c.length) return c.slice(0, MAX_CYCLES); } catch {}
+  return [{ f: 50, b: 10 }];
+}
+function saveCycles() { try { localStorage.setItem(CYCLE_KEY, JSON.stringify(cycles)); } catch {} }
+const snap = (v, max, fallback) => Number.isFinite(v) ? Math.min(max, Math.max(10, Math.round(v / 10) * 10)) : fallback;
+
+function renderCycles() {
+  $('cycleList').innerHTML = cycles.map((c, i) => `<div class="cyc" data-i="${i}"><span class="n">${i + 1}</span>
+    <label for="f${i}">집중 <input id="f${i}" data-k="f" type="number" min="10" max="120" step="10" value="${c.f}"> 분</label>
+    <label for="b${i}">휴식 <input id="b${i}" data-k="b" type="number" min="10" max="60" step="10" value="${c.b}"> 분</label>
+    <button type="button" class="small del" aria-label="주기 ${i + 1} 삭제" ${cycles.length === 1 ? 'disabled' : ''}>삭제</button></div>`).join('');
+  $('addCycle').disabled = cycles.length >= MAX_CYCLES;
+  if (!running) $('timer').textContent = fmt(cycles[0].f * 60000);
+}
+$('cycleList').addEventListener('change', e => {
+  const k = e.target.dataset.k; if (!k) return;
+  const c = cycles[e.target.closest('.cyc').dataset.i];
+  c[k] = snap(+e.target.value, k === 'f' ? 120 : 60, c[k]);
+  saveCycles(); renderCycles();
+});
+$('cycleList').addEventListener('click', e => {
+  if (!e.target.classList.contains('del')) return;
+  cycles.splice(e.target.closest('.cyc').dataset.i, 1); saveCycles(); renderCycles();
+});
+$('addCycle').onclick = () => { cycles.push({ f: 50, b: 10 }); saveCycles(); renderCycles(); };
+
+function enterPhase(i, ph) {
+  ci = i; phase = ph; phaseStart = Date.now();
+  const mins = ph === 'focus' ? cycles[i].f : cycles[i].b;
+  phaseEnd = phaseStart + mins * 60000;
+  clearTimeout(phaseTimer);
+  // ponytail: 구간마다 단발 setTimeout — 연쇄 타이머와 달리 백그라운드 탭에서도 분 단위로 늦춰지지 않음
+  phaseTimer = setTimeout(nextPhase, phaseEnd - phaseStart);
+  if (ph === 'focus') { newBeat(true); step = -1; bar = 0; Tone.Transport.start(); }
+  else { Tone.Transport.stop(); step = -1; draw(); }
+  $('state').textContent = `주기 ${i + 1}/${cycles.length} · ${ph === 'focus' ? '집중' : '휴식'}`;
+  document.querySelectorAll('.cyc').forEach((el, j) => el.classList.toggle('now', j === i));
+}
+function nextPhase() {
+  if (phase === 'focus') {
+    focusMs += Date.now() - phaseStart; rounds++;
+    notify(`집중 ${cycles[ci].f}분 완료`, `휴식 ${cycles[ci].b}분을 시작합니다. 비트를 멈춥니다.`);
+    enterPhase(ci, 'break'); chime(false);
+  } else {
+    const n = (ci + 1) % cycles.length;
+    notify('휴식 끝', `주기 ${n + 1} · 집중 ${cycles[n].f}분을 시작합니다.`);
+    enterPhase(n, 'focus'); chime(true);
+  }
+}
+const focusNow = () => focusMs + (phase === 'focus' ? Date.now() - phaseStart : 0);
 
 const fmt = ms => { const s = Math.floor(ms / 1000); return [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':'); };
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
@@ -142,33 +221,40 @@ function renderLog() {
   $('today').textContent = `오늘 ${Math.floor(mins)}분`;
   $('list').innerHTML = list.length ? list.slice(-10).reverse().map(s => {
     const d = new Date(s.start);
-    return `<li><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>· 이탈 ${s.leaves}회</small></span></li>`;
+    return `<li><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.rounds != null ? `· 집중 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></li>`;
   }).join('') : '<li class="empty">1분 이상 공부하면 여기에 쌓입니다.</li>';
 }
 
 async function lockScreen() { try { wake = await navigator.wakeLock?.request('screen'); } catch {} }
 
 async function start() {
+  try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
   await Tone.start();
   kit ??= buildKit();
-  running = true; startAt = Date.now(); leaves = 0; step = -1; bar = 0;
-  $('leaves').textContent = 0; $('state').textContent = '집중 중';
-  Tone.Transport.start();
+  running = true; startAt = Date.now(); leaves = 0; focusMs = 0; rounds = 0;
+  $('leaves').textContent = 0; $('focusSum').textContent = 0; $('cycles').disabled = true;
+  enterPhase(0, 'focus');
   lockScreen();
-  tick = setInterval(() => { const t = fmt(Date.now() - startAt); $('timer').textContent = t; document.title = `${t} · 집중 드럼`; }, 250);
+  tick = setInterval(() => {
+    const t = fmt(Math.max(0, phaseEnd - Date.now()));
+    $('timer').textContent = t; $('focusSum').textContent = Math.floor(focusNow() / 60000);
+    document.title = `${t} ${phase === 'focus' ? '집중' : '휴식'} · 집중 드럼`;
+  }, 250);
   $('toggle').textContent = '공부 끝내기';
 }
 
 function stop() {
-  running = false; clearInterval(tick);
+  const ms = focusNow();
+  running = false; clearInterval(tick); clearTimeout(phaseTimer);
   Tone.Transport.stop(); step = -1; draw();
   wake?.release().catch(() => {}); wake = null;
-  const ms = Date.now() - startAt;
-  if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves }); save(list); }
-  $('state').textContent = ms >= 60000 ? `${Math.round(ms / 60000)}분 기록됨` : '1분 미만이라 기록하지 않았어요';
-  $('timer').textContent = '00:00:00'; document.title = '집중 드럼';
+  if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves, rounds }); save(list); }
+  $('state').textContent = ms >= 60000 ? `집중 ${Math.round(ms / 60000)}분 기록됨` : '집중 1분 미만이라 기록하지 않았어요';
+  document.title = '집중 드럼';
+  $('cycles').disabled = false;
+  document.querySelectorAll('.cyc').forEach(el => el.classList.remove('now'));
   $('toggle').textContent = '공부 시작하기';
-  renderLog();
+  renderCycles(); renderLog();
 }
 
 $('toggle').onclick = () => running ? stop() : start();
@@ -176,11 +262,12 @@ $('regen').onclick = () => newBeat(true);
 $('vol').oninput = e => { if (kit) kit.vol.volume.value = +e.target.value; };
 document.addEventListener('visibilitychange', () => {
   if (!running) return;
-  if (document.hidden) $('leaves').textContent = ++leaves;
+  if (document.hidden) { if (phase === 'focus') $('leaves').textContent = ++leaves; } // 휴식 중 이탈은 세지 않음
   else lockScreen(); // 탭 복귀 시 화면 꺼짐 방지 재요청
 });
 
-buildGrid(); newBeat(true); renderLog();
+cycles = loadCycles();
+buildGrid(); newBeat(true); renderCycles(); renderLog();
 </script>
 </body>
 </html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>집중 드럼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<style>
+/* layout: 한 칸짜리 연습실 — 타이머 데크, 16스텝 시퀀서, 기록 리스트를 세로로 쌓음 */
+:root{
+  --bg:#eceef2; --panel:#f8f9fb; --fg:#1a1d26; --muted:#5d6475; --line:#d3d7e0;
+  --accent:#d9481c; --step:#2a3a8f; --step-dim:#c7cde0;
+  --display:"Martian Mono",ui-monospace,Consolas,monospace;
+  --body:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12141a; --panel:#1a1d26; --fg:#e8eaf0; --muted:#9097a8; --line:#2c303c;
+  --accent:#ff7a45; --step:#8fa2ff; --step-dim:#2f3548; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12141a; --panel:#1a1d26; --fg:#e8eaf0; --muted:#9097a8; --line:#2c303c;
+  --accent:#ff7a45; --step:#8fa2ff; --step-dim:#2f3548; color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:640px;margin:0 auto;padding:32px 16px 48px;display:grid;gap:20px}
+h1{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--muted)}
+h2{font-size:15px;margin:0}
+.deck{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;display:grid;gap:16px}
+.timer{font-family:var(--display);font-size:clamp(40px,12vw,64px);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
+.meta{font-family:var(--display);font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+.meta b{color:var(--fg);font-weight:600}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:600 15px var(--body);border-radius:10px;padding:12px 20px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:focus-visible,input:focus-visible{outline:2px solid var(--step);outline-offset:2px}
+.vol{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-left:auto}
+.vol input{width:110px;accent-color:var(--accent)}
+.seq{display:grid;gap:6px;overflow-x:auto}
+.row{display:grid;grid-template-columns:44px repeat(16,minmax(10px,1fr));gap:4px;align-items:center}
+.row span{font-family:var(--display);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.cell{aspect-ratio:1;border-radius:3px;background:var(--step-dim);max-width:100%}
+.cell.beat{box-shadow:inset 0 0 0 1px var(--line)}
+.cell.on{background:var(--step)}
+.cell.now{outline:2px solid var(--accent);outline-offset:1px}
+.log{display:grid;gap:10px}
+.log header{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+#today{font-family:var(--display);font-size:13px;color:var(--muted)}
+ol{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+li small{color:var(--muted)}
+.empty{color:var(--muted);font-size:14px}
+@media (prefers-reduced-motion:reduce){.cell{transition:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>집중 드럼</h1>
+  <section class="deck">
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="meta"><span>템포 <b id="bpm">—</b> BPM</span><span>탭 이탈 <b id="leaves">0</b>회</span><span id="state">대기 중</span></div>
+    <div class="controls">
+      <button class="primary" id="toggle">공부 시작하기</button>
+      <button id="regen">새 비트</button>
+      <label class="vol" for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
+    </div>
+    <div class="seq" id="seq" aria-label="현재 드럼 패턴"></div>
+  </section>
+  <section class="log">
+    <header><h2>공부 기록</h2><span id="today">오늘 0분</span></header>
+    <ol id="list"></ol>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+<script>
+const ROWS = ['kick', 'snare', 'hat'], KEY = 'focus-drum-sessions';
+const $ = id => document.getElementById(id);
+let pat, bpm, step = -1, bar = 0, running = false, startAt = 0, leaves = 0, kit = null, wake = null, tick = null;
+
+// 로파이 힙합 감성의 16스텝 패턴을 확률로 생성 (값 = 세기 0~1)
+function generate() {
+  const r = Math.random, p = { kick: [], snare: [], hat: [] };
+  for (let i = 0; i < 16; i++) {
+    p.kick[i] = i === 0 || i === 8 ? 1 : i % 2 === 0 ? (r() < .2 ? .7 : 0) : (r() < .08 ? .5 : 0);
+    p.snare[i] = i === 4 || i === 12 ? .9 : (r() < .07 ? .2 : 0);
+    p.hat[i] = i % 2 === 0 ? (r() < .9 ? .45 + r() * .3 : 0) : (r() < .3 ? .15 + r() * .2 : 0);
+  }
+  return p;
+}
+
+function newBeat(changeTempo) {
+  pat = generate();
+  if (changeTempo) { bpm = 70 + Math.floor(Math.random() * 20); Tone.Transport.bpm.value = bpm; $('bpm').textContent = bpm; }
+  draw();
+}
+
+const cells = {};
+function buildGrid() {
+  for (const k of ROWS) {
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = `<span>${k}</span>`;
+    cells[k] = [];
+    for (let i = 0; i < 16; i++) {
+      const c = document.createElement('div'); c.className = 'cell' + (i % 4 === 0 ? ' beat' : '');
+      row.append(c); cells[k].push(c);
+    }
+    $('seq').append(row);
+  }
+}
+function draw() {
+  for (const k of ROWS) cells[k].forEach((c, i) => {
+    c.classList.toggle('on', pat[k][i] > 0);
+    c.style.opacity = pat[k][i] > 0 ? .35 + pat[k][i] * .65 : 1;
+    c.classList.toggle('now', i === step);
+  });
+}
+
+function buildKit() {
+  const vol = new Tone.Volume(+$('vol').value).connect(new Tone.Filter(4500, 'lowpass').toDestination());
+  const kick = new Tone.MembraneSynth({ pitchDecay: .05, octaves: 6, envelope: { attack: .001, decay: .45, sustain: 0 } }).connect(vol);
+  const snare = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: .001, decay: .18, sustain: 0 } }).connect(new Tone.Filter(1800, 'bandpass').connect(vol));
+  const hat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: .001, decay: .04, sustain: 0 } }).connect(new Tone.Filter(7000, 'highpass').connect(vol));
+  hat.volume.value = -10;
+  Tone.Transport.swing = .15; Tone.Transport.swingSubdivision = '16n';
+  Tone.Transport.scheduleRepeat(time => {
+    step = (step + 1) % 16;
+    if (step === 0 && ++bar % 8 === 0) pat = generate(); // 8마디마다 패턴 변주
+    if (pat.kick[step]) kick.triggerAttackRelease('C1', '8n', time, pat.kick[step]);
+    if (pat.snare[step]) snare.triggerAttackRelease('16n', time, pat.snare[step]);
+    if (pat.hat[step]) hat.triggerAttackRelease('32n', time, pat.hat[step]);
+    Tone.Draw.schedule(draw, time);
+  }, '16n');
+  return { vol };
+}
+
+const fmt = ms => { const s = Math.floor(ms / 1000); return [s / 3600, s / 60 % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, '0')).join(':'); };
+function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
+function save(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} }
+
+function renderLog() {
+  const list = load(), today = new Date().toDateString();
+  const mins = list.filter(s => new Date(s.start).toDateString() === today).reduce((a, s) => a + s.ms, 0) / 60000;
+  $('today').textContent = `오늘 ${Math.floor(mins)}분`;
+  $('list').innerHTML = list.length ? list.slice(-10).reverse().map(s => {
+    const d = new Date(s.start);
+    return `<li><span>${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>· 이탈 ${s.leaves}회</small></span></li>`;
+  }).join('') : '<li class="empty">1분 이상 공부하면 여기에 쌓입니다.</li>';
+}
+
+async function lockScreen() { try { wake = await navigator.wakeLock?.request('screen'); } catch {} }
+
+async function start() {
+  await Tone.start();
+  kit ??= buildKit();
+  running = true; startAt = Date.now(); leaves = 0; step = -1; bar = 0;
+  $('leaves').textContent = 0; $('state').textContent = '집중 중';
+  Tone.Transport.start();
+  lockScreen();
+  tick = setInterval(() => { const t = fmt(Date.now() - startAt); $('timer').textContent = t; document.title = `${t} · 집중 드럼`; }, 250);
+  $('toggle').textContent = '공부 끝내기';
+}
+
+function stop() {
+  running = false; clearInterval(tick);
+  Tone.Transport.stop(); step = -1; draw();
+  wake?.release().catch(() => {}); wake = null;
+  const ms = Date.now() - startAt;
+  if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves }); save(list); }
+  $('state').textContent = ms >= 60000 ? `${Math.round(ms / 60000)}분 기록됨` : '1분 미만이라 기록하지 않았어요';
+  $('timer').textContent = '00:00:00'; document.title = '집중 드럼';
+  $('toggle').textContent = '공부 시작하기';
+  renderLog();
+}
+
+$('toggle').onclick = () => running ? stop() : start();
+$('regen').onclick = () => newBeat(true);
+$('vol').oninput = e => { if (kit) kit.vol.volume.value = +e.target.value; };
+document.addEventListener('visibilitychange', () => {
+  if (!running) return;
+  if (document.hidden) $('leaves').textContent = ++leaves;
+  else lockScreen(); // 탭 복귀 시 화면 꺼짐 방지 재요청
+});
+
+buildGrid(); newBeat(true); renderLog();
+</script>
+</body>
+</html>

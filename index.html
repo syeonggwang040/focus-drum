@@ -110,6 +110,13 @@ button.step{width:32px;height:32px;padding:0;font-size:17px;line-height:1;justif
 .ratio-wrap{display:grid;gap:4px;font-size:13px;color:var(--muted)}
 .ratio{display:flex;gap:2px;height:10px;border-radius:5px;overflow:hidden}
 .ratio .f{background:var(--accent)} .ratio .b{background:var(--step)}
+.sheet{display:grid;gap:8px}
+.sheet h3{font-size:14px;margin:0}
+.sheet h3 small{font-weight:400;font-size:13px;color:var(--muted);margin-left:6px}
+.sheet-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.sheet-row label{min-width:5.5em}
+.sheet-row input{font:inherit;color:var(--fg);padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);flex:1;min-width:0}
+#sheetPin{flex:0 0 7em}
 button.danger{border-color:var(--accent);color:var(--accent);font-weight:600}
 .sets{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .tab[aria-selected="true"]{background:var(--fg);border-color:var(--fg);color:var(--bg)}
@@ -140,6 +147,12 @@ button:disabled{cursor:default;opacity:.5}
     <div class="sliders">
       <label for="vol">볼륨 <input id="vol" type="range" min="-36" max="0" value="-10"></label>
       <label id="pipDimWrap" for="pipDim" hidden>미니 창 선명도 <input id="pipDim" type="range" min="20" max="100" value="100"></label>
+    </div>
+    <div class="sheet">
+      <h3>구글 시트에 기록 저장 <small id="sheetStatus" aria-live="polite">연결 안 됨</small></h3>
+      <div class="sheet-row"><label for="sheetUrl">웹 앱 주소</label><input id="sheetUrl" type="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      <div class="sheet-row"><label for="sheetPin">PIN</label><input id="sheetPin" type="password" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="숫자 3자리">
+        <button type="button" class="small" id="sheetConnect">연결</button><button type="button" class="small" id="sheetDisconnect" hidden>연결 해제</button></div>
     </div>
     <fieldset class="cycles" id="cycles">
       <legend>선택한 세트의 주기 <small>10분 단위 · 마지막 주기가 끝나면 처음부터 반복</small></legend>
@@ -390,6 +403,56 @@ const fmt = ms => { const s = Math.ceil(ms / 1000); return `${String(Math.floor(
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
 function save(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} }
 
+// 구글 시트 동기화: 기록은 브라우저에 먼저 저장하고, 연결돼 있으면 시트로 보낸 뒤 시트 기준으로 다시 맞춤
+// 웹 앱 주소는 기기에 계속 저장, PIN은 1주일 뒤 다시 입력
+const SHEET_URL_KEY = 'focus-drum-sheet-url', SHEET_AUTH_KEY = 'focus-drum-sheet-auth', WEEK = 7 * 86400000;
+const getLS = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const setLS = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const sid = s => String(s.id ?? s.start);
+function sheetAuth() {
+  const url = getLS(SHEET_URL_KEY, ''), a = getLS(SHEET_AUTH_KEY, null);
+  return url && a && a.until > Date.now() ? { url, pin: a.pin, until: a.until } : null;
+}
+function renderSheetStatus(msg) {
+  const auth = sheetAuth(), u = auth && new Date(auth.until);
+  $('sheetDisconnect').hidden = !auth;
+  $('sheetStatus').textContent = msg || (auth ? `연결됨 · ${u.getMonth() + 1}/${u.getDate()}까지 유지`
+    : getLS(SHEET_URL_KEY, '') ? 'PIN을 입력하면 1주일 동안 연결이 유지돼요' : '연결 안 됨');
+}
+async function callSheet(url, body) {
+  const r = await fetch(url, { method: 'POST', body: JSON.stringify(body) }); // text/plain 이라 사전 요청 없음
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+let syncing = false;
+async function sync() {
+  const auth = sheetAuth();
+  if (!auth || syncing) return renderSheetStatus();
+  syncing = true; renderSheetStatus('동기화 중…');
+  try {
+    const pending = load().filter(s => !s.synced);
+    if (pending.length) await callSheet(auth.url, { pin: auth.pin, action: 'add', sessions: pending.map(s => ({ ...s, id: sid(s) })) });
+    const { sessions } = await callSheet(auth.url, { pin: auth.pin, action: 'list' });
+    const sent = new Set(pending.map(sid)), fromSheet = sessions.map(s => ({ ...s, synced: true }));
+    const newer = load().filter(s => !s.synced && !sent.has(sid(s))); // 전송 중에 새로 생긴 기록
+    save([...fromSheet, ...newer].sort((a, b) => a.start - b.start));
+    renderLog(); renderSheetStatus();
+  } catch (e) {
+    if (e.message === 'wrong') { setLS(SHEET_AUTH_KEY, null); renderSheetStatus('PIN이 맞지 않아요. 다시 입력해 주세요'); }
+    else if (e.message === 'locked') renderSheetStatus('틀린 PIN이 많아 1시간 동안 잠겼어요');
+    else renderSheetStatus('시트에 연결하지 못했어요. 기록은 이 브라우저에 두었다가 다음에 다시 보냅니다');
+  } finally { syncing = false; }
+}
+$('sheetConnect').onclick = () => {
+  const url = $('sheetUrl').value.trim(), pin = $('sheetPin').value.trim();
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) return renderSheetStatus('웹 앱 주소는 https://script.google.com/macros/s/…/exec 형식이어야 해요');
+  if (!/^\d{3}$/.test(pin)) return renderSheetStatus('PIN은 숫자 3자리예요');
+  setLS(SHEET_URL_KEY, url); setLS(SHEET_AUTH_KEY, { pin, until: Date.now() + WEEK });
+  $('sheetPin').value = ''; sync();
+};
+$('sheetDisconnect').onclick = () => { setLS(SHEET_AUTH_KEY, null); renderSheetStatus(); };
+
 const DAY = ['일', '월', '화', '수', '목', '금', '토'];
 const dayKey = t => new Date(t).toDateString();
 const dayName = d => `${d.getMonth() + 1}/${d.getDate()} (${DAY[d.getDay()]})`;
@@ -446,7 +509,7 @@ function stop() {
   running = false; clearInterval(tick); clearTimeout(phaseTimer);
   Tone.Transport.stop(); step = -1; draw();
   wake?.release().catch(() => {}); wake = null;
-  if (ms >= 60000) { const list = load(); list.push({ start: startAt, ms, leaves, rounds, set: sets[active].name }); save(list); }
+  if (ms >= 60000) { const list = load(); list.push({ id: String(startAt), start: startAt, ms, leaves, rounds, set: sets[active].name }); save(list); sync(); }
   document.title = '집중 드럼';
   $('cycles').disabled = $('setPick').disabled = false; $('seq').hidden = true;
   document.querySelectorAll('.cyc').forEach(el => el.classList.remove('now'));
@@ -478,6 +541,7 @@ document.addEventListener('visibilitychange', () => {
 sets = loadSets();
 try { active = Math.min(+localStorage.getItem(ACTIVE_KEY) || 0, sets.length - 1); } catch {}
 buildGrid(); newBeat(true); renderSets(); renderLog();
+$('sheetUrl').value = getLS(SHEET_URL_KEY, ''); sync();
 </script>
 </body>
 </html>

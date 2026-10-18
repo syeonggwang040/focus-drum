@@ -515,30 +515,44 @@ async function openPip() {
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
     <style>
       html{background:#000}
-      /* 태도 문장이 주인공: 위 상태 줄(작게) · 가운데 태도(가장 크게) · 아래 버튼(마우스를 올릴 때만). 남은 시간은 보여 주지 않음 */
-      body{margin:0;height:100vh;box-sizing:border-box;padding:12px 16px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:6px;
-        color:#e6ece8;font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;font-size:13px;background:#171c19;--c:#5a665f;position:relative;overflow:hidden}
+      /* 평소엔 태도 문장만. 창을 클릭하면 위에 '항상 위 표시' 레버, 아래에 버튼이 겹쳐 나타나고 5초 뒤 다시 숨음 */
+      body{margin:0;height:100vh;box-sizing:border-box;padding:12px 16px;display:flex;cursor:pointer;
+        color:#e6ece8;font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;font-size:13px;background:#171c19;--c:#5a665f;position:relative;overflow:hidden;transition:opacity .2s}
       body.focus{--c:#6FBF94} body.break{--c:#93AEC9} body.paused{--c:#8f9b94}
-      #ph{display:flex;align-items:center;gap:6px;opacity:.75}
-      #ph::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
-      #att{display:flex;align-items:center;min-height:0;font-weight:600;line-height:1.3;letter-spacing:-.01em;text-wrap:balance;overflow:hidden;word-break:keep-all}
+      #att{flex:1;display:flex;align-items:center;min-height:0;font-weight:600;line-height:1.3;letter-spacing:-.01em;text-wrap:balance;overflow:hidden;word-break:keep-all}
       body.paused #att{opacity:.55}
       mark{color:#fff;background:linear-gradient(transparent 48%,color-mix(in srgb,var(--c) 70%,transparent) 48%);padding:0 2px;border-radius:2px}
-      .foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-height:28px}
-      .btns{display:flex;gap:6px;opacity:0;transition:opacity .15s}
-      body:hover .btns,.btns:focus-within{opacity:1}
+      .bar{position:absolute;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(23,28,25,.94);cursor:default;opacity:0;pointer-events:none;transition:opacity .15s}
+      .top{top:0;justify-content:space-between} .foot{bottom:0;justify-content:flex-end}
+      html.reveal .bar{opacity:1;pointer-events:auto}
       button{font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.4);background:#171c19;color:inherit;cursor:pointer}
+      .lever{display:flex;align-items:center;gap:8px;padding:2px 4px;border:0;background:none;font-weight:400}
+      .lever i{width:34px;height:20px;border-radius:10px;background:rgba(255,255,255,.25);position:relative;transition:background .15s}
+      .lever i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+      .lever[aria-checked="true"] i{background:#6FBF94} .lever[aria-checked="true"] i::after{transform:translateX(14px)}
+      .hint{opacity:.6}
+      button:focus-visible{outline:2px solid #93AEC9;outline-offset:2px}
       [hidden]{display:none!important}
-      @media (prefers-reduced-motion:reduce){.btns{transition:none}}
+      @media (prefers-reduced-motion:reduce){body,.bar,.lever i,.lever i::after{transition:none}}
     </style>`;
-  d.body.innerHTML = `<div id="ph"></div><div id="att"><span></span></div>
-    <div class="foot"><span class="btns"><button id="pp">일시정지</button><button id="end">끝내기</button></span></div>`;
-  applyDim();
+  d.body.innerHTML = `<div id="att"><span></span></div>
+    <div class="bar top"><button class="lever" id="pin" role="switch" aria-checked="true">항상 위 표시<i aria-hidden="true"></i></button><span class="hint" id="pinHint"></span></div>
+    <div class="bar foot"><button id="pp">일시정지</button><button id="end">끝내기</button></div>`;
+  // 창 클릭 → 조작 막대 보이기/숨기기, 조작이 없으면 5초 뒤 자동으로 숨김
+  let hideT = null;
+  const reveal = on => {
+    d.documentElement.classList.toggle('reveal', on); clearTimeout(hideT);
+    if (on) hideT = setTimeout(() => reveal(false), 5000);
+    applyDim();
+  };
+  d.body.addEventListener('click', e => { if (e.target.closest('.bar')) reveal(true); else reveal(!d.documentElement.classList.contains('reveal')); });
+  d.addEventListener('keydown', () => reveal(true));
+  d.getElementById('pin').onclick = () => { setLS(PIN_KEY, !pipPinned()); applyDim(); };
   d.getElementById('end').onclick = () => { if (running) stop(); };
   d.getElementById('pp').onclick = () => { if (running) paused ? resume() : pause(); };
   pip.addEventListener('resize', () => { lastPipText = null; updatePip(); });
   pip.addEventListener('pagehide', () => { pip = null; });
-  lastPipText = null; updatePip();
+  applyDim(); lastPipText = null; updatePip();
 }
 // 태도 문장을 창 크기에 맞춰 가장 크게 (넘치면 한 단계씩 줄임)
 let lastPipText = null;
@@ -553,7 +567,6 @@ function updatePip() {
   if (!pip) return;
   const d = pip.document, att = d.getElementById('att');
   d.body.className = running ? (paused ? 'paused' : phase) : '';
-  d.getElementById('ph').textContent = running ? $('state').textContent : '대기 중';
   // 몰입 중엔 이번 태도, 대기 중엔 입력칸의 태도를 가장 크게
   const big = (running ? attitude : getAtt()) || '몰입을 시작하면 태도가 여기에 떠요';
   if (big !== lastPipText) { att.firstElementChild.innerHTML = marked(big); lastPipText = big; fitPipText(att); }
@@ -562,7 +575,16 @@ function updatePip() {
 }
 // 흐림: 검은 바탕 위 본문 불투명도를 낮춤 (창 자체 투명화는 브라우저가 지원하지 않음)
 const DIM_KEY = 'focus-drum-pip-opacity';
-function applyDim() { if (pip) pip.document.body.style.opacity = $('pipDim').value / 100; }
+// '항상 위 표시' 레버: 미니 창의 항상 위 설정은 브라우저가 고정하므로, 끄면 15%로 흐려서 뒤 작업을 덜 가림 (클릭해 조작하는 동안은 또렷하게)
+const PIN_KEY = 'focus-drum-pip-pinned';
+const pipPinned = () => getLS(PIN_KEY, true);
+function applyDim() {
+  if (!pip) return;
+  const d = pip.document, pinned = pipPinned(), shown = d.documentElement.classList.contains('reveal');
+  d.body.style.opacity = $('pipDim').value / 100 * (pinned || shown ? 1 : 0.15);
+  const lever = d.getElementById('pin');
+  if (lever) { lever.setAttribute('aria-checked', pinned); d.getElementById('pinHint').textContent = pinned ? '' : '꺼져 있는 동안 흐리게 보여요'; }
+}
 
 const fmt = ms => { const s = Math.ceil(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }

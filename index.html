@@ -9,17 +9,17 @@
 <style>
 /* layout: 지금(다이얼·시작) / 설정 / 기록 세 구역을 세로로 쌓음 — 공부 중에는 '지금'만 보면 되도록 */
 :root{
-  --bg:#eceef2; --panel:#f8f9fb; --fg:#1a1d26; --muted:#5d6475; --line:#d3d7e0;
-  --accent:#d9481c; --step:#2a3a8f; --step-dim:#c7cde0;
+  --bg:#eef1ee; --panel:#f8faf8; --fg:#18201b; --muted:#5a665f; --line:#d2dad4;
+  --accent:#2F6B4F; --on-accent:#ffffff; --step:#4A6A8A; --step-dim:#d5ddd7;
   --display:"Martian Mono",ui-monospace,Consolas,monospace;
   --body:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#12141a; --panel:#1a1d26; --fg:#e8eaf0; --muted:#9097a8; --line:#2c303c;
-  --accent:#ff7a45; --step:#8fa2ff; --step-dim:#2f3548; color-scheme:dark}}
+  --bg:#101412; --panel:#171c19; --fg:#e6ece8; --muted:#8f9b94; --line:#29312c;
+  --accent:#6FBF94; --on-accent:#0E1F16; --step:#93AEC9; --step-dim:#26302b; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#12141a; --panel:#1a1d26; --fg:#e8eaf0; --muted:#9097a8; --line:#2c303c;
-  --accent:#ff7a45; --step:#8fa2ff; --step-dim:#2f3548; color-scheme:dark}
+  --bg:#101412; --panel:#171c19; --fg:#e6ece8; --muted:#8f9b94; --line:#29312c;
+  --accent:#6FBF94; --on-accent:#0E1F16; --step:#93AEC9; --step-dim:#26302b; color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
 .wrap{max-width:640px;margin:0 auto;padding:32px 16px 48px;display:grid;gap:20px}
 h1{font-family:var(--display);font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--muted)}
@@ -36,13 +36,18 @@ h2{font-size:15px;margin:0}
 .face{position:absolute;inset:13%;border-radius:50%;background:var(--panel);display:grid;place-content:center;justify-items:center;gap:8px}
 .timer{font-family:var(--display);font-size:clamp(34px,10vw,50px);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
 .chip{font-size:13px;font-weight:600;padding:2px 12px;border-radius:999px;background:var(--step-dim);color:var(--fg)}
-.dial[data-phase="focus"] .chip{background:var(--accent);color:#fff}
+.dial[data-phase="focus"] .chip{background:var(--accent);color:var(--on-accent)}
 .dial[data-phase="break"] .chip{background:var(--step);color:var(--panel)}
 #end{justify-self:center}
 .attitude{display:grid;gap:6px;width:min(100%,420px);text-align:left}
 .attitude label{font-size:14px;font-weight:600}
 .attitude label small{display:block;font-weight:400;font-size:13px;color:var(--muted)}
-.attitude input,.reflect input{font:inherit;color:var(--fg);padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);width:100%;box-sizing:border-box}
+/* 형광펜: 글자 아래쪽 절반에 색을 칠함 */
+mark,.att-edit b{font-weight:600;color:inherit;background:linear-gradient(transparent 50%,color-mix(in srgb,var(--accent) 42%,transparent) 50%)}
+.att-edit{min-height:1.55em;outline:none;white-space:nowrap;overflow-x:auto;cursor:text}
+.att-edit:empty::before{content:attr(data-placeholder);color:var(--muted)}
+.att-edit:focus-visible{outline:2px solid var(--step);outline-offset:2px}
+.att-edit,.reflect input{font:inherit;color:var(--fg);padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);width:100%;box-sizing:border-box}
 .att-input{display:flex;gap:8px}
 .att-input input{flex:1;min-width:0}
 .att-input button{flex:none;align-self:stretch}
@@ -56,7 +61,7 @@ h2{font-size:15px;margin:0}
 .scale-q{font-size:14px}
 .dots{display:flex;gap:8px}
 .dots button{width:40px;height:40px;padding:0;border-radius:50%;font-variant-numeric:tabular-nums}
-.dots button[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.dots button[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .ends{display:flex;justify-content:space-between;width:calc(5 * 40px + 4 * 8px);font-size:12px;color:var(--muted)}
 .reflect-btns{display:flex;gap:8px}
 li.rec{display:grid;gap:2px}
@@ -68,7 +73,7 @@ li.rec .att{font-size:14px;color:var(--muted)}
 #state{font-weight:600}
 #next{font-size:14px;color:var(--muted)}
 button{font:600 15px var(--body);border-radius:10px;padding:12px 20px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--fg)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 button.big{width:min(100%,320px);padding:16px;font-size:17px;border-radius:14px}
 /* 모바일: 시작 버튼을 엄지가 닿는 화면 하단에 고정 */
 @media (max-width:600px){
@@ -159,8 +164,8 @@ button:disabled{cursor:default;opacity:.5}
   <section class="deck stage" aria-label="지금">
     <fieldset class="pick" id="setPick" aria-label="몰입할 세트"><div class="sets" id="setTabs" role="tablist"></div></fieldset>
     <div class="attitude" id="attBox">
-      <label for="attitude">이번 세션의 태도 <small>지금을 fully 살아 내는 방식을 적어 보세요</small></label>
-      <div class="att-input"><input id="attitude" maxlength="60" autocomplete="off" placeholder="비워 두면 추천 태도로 시작해요"><button type="button" class="small" id="attSuggest">추천받기</button></div>
+      <label id="attLabel" for="attitude">이번 세션의 태도 <small>지금을 fully 살아 내는 방식을 적어 보세요 · 강조할 단어는 선택 후 Ctrl+B</small></label>
+      <div class="att-input"><div id="attitude" class="att-edit" contenteditable="true" role="textbox" aria-labelledby="attLabel" data-placeholder="비워 두면 추천 태도로 시작해요"></div><button type="button" class="small" id="attSuggest">추천받기</button></div>
       <div class="att-recent" id="attRecent"></div>
     </div>
     <p class="att-line" id="attLine" hidden></p>
@@ -431,29 +436,45 @@ let attitude = '', fulls = [], flows = [], reflectMode = null, pick = { full: 0,
 function renderAttRecent() {
   $('attRecent').replaceChildren(...getLS(ATT_KEY, []).map(t => {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'small'; b.textContent = t; b.title = t;
-    b.onclick = () => { $('attitude').value = t; };
+    const plain = t.replace(/\*\*/g, '');
+    b.type = 'button'; b.className = 'small'; b.textContent = plain; b.title = plain;
+    b.onclick = () => setAtt(t);
     return b;
   }));
 }
 const rememberAtt = t => { if (t) setLS(ATT_KEY, [t, ...getLS(ATT_KEY, []).filter(x => x !== t)].slice(0, 3)); };
-// 충만주의 몰입을 돕는 추천 태도: 지금·과정·경험에 fully 머무는 방식
+// 강조는 **단어** 로 저장하고, 화면에서는 형광펜(<mark>)으로 그림
+const marked = (t, tag = 'mark') => esc(t).replace(/\*\*(.+?)\*\*/g, `<${tag}>$1</${tag}>`);
+function getAtt() {
+  const walk = n => n.nodeType === 3 ? n.nodeValue
+    : /^(B|STRONG)$/.test(n.nodeName) ? `**${n.textContent}**` : [...n.childNodes].map(walk).join('');
+  return walk($('attitude')).replace(/\*\*\s*\*\*/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+const setAtt = t => { $('attitude').innerHTML = marked(t, 'b'); };
+$('attitude').addEventListener('keydown', e => {
+  if (e.key === 'Enter') e.preventDefault(); // 한 줄만
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); document.execCommand('bold'); }
+  if ((e.ctrlKey || e.metaKey) && /^[iu]$/i.test(e.key)) e.preventDefault(); // 기울임·밑줄은 쓰지 않음
+});
+$('attitude').addEventListener('paste', e => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain').replace(/\s+/g, ' ')); });
+$('attitude').addEventListener('input', () => { if (!$('attitude').textContent) $('attitude').innerHTML = ''; }); // 비우면 안내 문구가 다시 보이게
+// 충만주의 몰입을 돕는 추천 태도: 지금·과정·경험에 fully 머무는 방식 (핵심 단어 1~2개 강조)
 const ATT_SUGGEST = [
-  '번거로운 과정도 지금 이 순간의 삶으로 온전히 겪어 낸다',
-  '결과를 미리 당겨 오지 않고, 지금 이 한 줄에 머문다',
-  '막히는 순간도 내 삶의 한 장면으로 fully 받아들인다',
-  '귀찮음이 올라오면 그 감각까지 느끼며 한 걸음 더 간다',
-  '한 문제를 끝까지 붙잡는 이 시간을 충만하게 산다',
-  '서두르지 않고, 깊이 겪어 내는 쪽을 고른다',
-  '손끝의 감각과 지금 떠오르는 생각에 주의를 둔다',
-  '지루한 구간에서도 살아 있는 나를 느끼며 이어 간다',
-  '고통스러운 구간도 인간으로서 fully 사는 시간으로 맞이한다',
-  '모르는 것을 마주한 지금을 배움의 한가운데로 산다',
-  '내가 통제할 수 있는 지금의 과정에 온 힘을 쏟는다',
-  '결과는 내려놓고, 내 손에 있는 이 한 걸음을 통제한다',
+  '번거로운 과정도 지금 이 순간의 삶으로 **온전히** 겪어 낸다',
+  '결과를 미리 당겨 오지 않고, **지금 이 한 줄**에 머문다',
+  '**막히는 순간**도 내 삶의 한 장면으로 **fully** 받아들인다',
+  '**귀찮음**이 올라오면 그 감각까지 느끼며 **한 걸음 더** 간다',
+  '한 문제를 끝까지 붙잡는 이 시간을 **충만하게** 산다',
+  '서두르지 않고, **깊이 겪어 내는** 쪽을 고른다',
+  '**손끝의 감각**과 지금 떠오르는 생각에 주의를 둔다',
+  '**지루한 구간**에서도 **살아 있는 나**를 느끼며 이어 간다',
+  '고통스러운 구간도 인간으로서 **fully 사는 시간**으로 맞이한다',
+  '모르는 것을 마주한 지금을 **배움의 한가운데**로 산다',
+  '내가 **통제할 수 있는** 지금의 과정에 온 힘을 쏟는다',
+  '결과는 내려놓고, 내 손에 있는 **이 한 걸음**을 **통제**한다',
 ];
-const suggestAtt = () => { const cur = $('attitude').value, pool = ATT_SUGGEST.filter(t => t !== cur); return pool[Math.floor(Math.random() * pool.length)]; };
-$('attSuggest').onclick = () => { $('attitude').value = suggestAtt(); };
+const suggestAtt = () => { const cur = getAtt(), pool = ATT_SUGGEST.filter(t => t !== cur); return pool[Math.floor(Math.random() * pool.length)]; };
+$('attSuggest').onclick = () => setAtt(suggestAtt());
 document.querySelectorAll('.scale .dots').forEach(d => {
   d.innerHTML = [1, 2, 3, 4, 5].map(n => `<button type="button" role="radio" aria-checked="false" data-n="${n}">${n}</button>`).join('');
 });
@@ -494,28 +515,24 @@ async function openPip() {
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@600&family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
     <style>
       html{background:#000}
-      /* 태도 문장이 주인공: 위 상태 줄(작게) · 가운데 태도(가장 크게) · 아래 남은 시간(작게) · 맨 아래 진행 막대 */
-      body{margin:0;height:100vh;box-sizing:border-box;padding:12px 16px 18px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:6px;
-        color:#e8eaf0;font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;font-size:13px;background:#1a1d26;--c:#5d6475;position:relative;overflow:hidden}
-      body.focus{--c:#ff7a45} body.break{--c:#8fa2ff} body.paused{--c:#9097a8}
+      /* 태도 문장이 주인공: 위 상태 줄(작게) · 가운데 태도(가장 크게) · 아래 버튼(마우스를 올릴 때만). 남은 시간은 보여 주지 않음 */
+      body{margin:0;height:100vh;box-sizing:border-box;padding:12px 16px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:6px;
+        color:#e6ece8;font-family:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;font-size:13px;background:#171c19;--c:#5a665f;position:relative;overflow:hidden}
+      body.focus{--c:#6FBF94} body.break{--c:#93AEC9} body.paused{--c:#8f9b94}
       #ph{display:flex;align-items:center;gap:6px;opacity:.75}
       #ph::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
       #att{display:flex;align-items:center;min-height:0;font-weight:600;line-height:1.3;letter-spacing:-.01em;text-wrap:balance;overflow:hidden;word-break:keep-all}
-      #att.time{font-family:"Martian Mono",ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;color:var(--c)}
       body.paused #att{opacity:.55}
-      .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px}
-      #left{opacity:.75;font-variant-numeric:tabular-nums}
+      mark{color:#fff;background:linear-gradient(transparent 48%,color-mix(in srgb,var(--c) 70%,transparent) 48%);padding:0 2px;border-radius:2px}
+      .foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-height:28px}
       .btns{display:flex;gap:6px;opacity:0;transition:opacity .15s}
       body:hover .btns,.btns:focus-within{opacity:1}
-      button{font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.4);background:#1a1d26;color:inherit;cursor:pointer}
-      #bar{position:absolute;left:0;right:0;bottom:0;height:6px;background:rgba(255,255,255,.1)}
-      #bar span{display:block;height:100%;background:var(--c);width:var(--p,100%);transition:width .3s linear}
+      button{font-weight:600;font-size:13px;font-family:inherit;padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.4);background:#171c19;color:inherit;cursor:pointer}
       [hidden]{display:none!important}
-      @media (prefers-reduced-motion:reduce){#bar span,.btns{transition:none}}
+      @media (prefers-reduced-motion:reduce){.btns{transition:none}}
     </style>`;
   d.body.innerHTML = `<div id="ph"></div><div id="att"><span></span></div>
-    <div class="foot"><span id="left"></span><span class="btns"><button id="pp">일시정지</button><button id="end">끝내기</button></span></div>
-    <div id="bar" role="progressbar" aria-label="남은 시간"><span></span></div>`;
+    <div class="foot"><span class="btns"><button id="pp">일시정지</button><button id="end">끝내기</button></span></div>`;
   applyDim();
   d.getElementById('end').onclick = () => { if (running) stop(); };
   d.getElementById('pp').onclick = () => { if (running) paused ? resume() : pause(); };
@@ -535,16 +552,11 @@ function fitPipText(box) {
 function updatePip() {
   if (!pip) return;
   const d = pip.document, att = d.getElementById('att');
-  const left = Math.max(0, phaseEnd - nowT()), frac = running ? left / (phaseEnd - phaseStart) : 1;
   d.body.className = running ? (paused ? 'paused' : phase) : '';
   d.getElementById('ph').textContent = running ? $('state').textContent : '대기 중';
-  // 태도가 있으면 태도를, 없으면 남은 시간을 가장 크게
-  const big = running && attitude ? attitude : fmt(running ? left : cycles[0].f * 60000);
-  att.classList.toggle('time', !(running && attitude));
-  if (big !== lastPipText) { att.firstElementChild.textContent = big; lastPipText = big; fitPipText(att); }
-  d.getElementById('left').textContent = running ? (attitude ? `${Math.ceil(left / 60000)}분 남음` : '') : '';
-  d.getElementById('bar').firstElementChild.style.setProperty('--p', `${frac * 100}%`);
-  d.getElementById('bar').ariaValueNow = Math.round(frac * 100);
+  // 몰입 중엔 이번 태도, 대기 중엔 입력칸의 태도를 가장 크게
+  const big = (running ? attitude : getAtt()) || '몰입을 시작하면 태도가 여기에 떠요';
+  if (big !== lastPipText) { att.firstElementChild.innerHTML = marked(big); lastPipText = big; fitPipText(att); }
   d.getElementById('pp').hidden = d.getElementById('end').hidden = !running;
   d.getElementById('pp').textContent = paused ? '계속' : '일시정지';
 }
@@ -632,7 +644,7 @@ function renderLog() {
   $('list').innerHTML = groups.size ? [...groups].map(([k, ss]) => `<section>
     <h3>${dayName(new Date(k))}<span>${hm(Math.floor(ss.reduce((a, s) => a + s.ms, 0) / 60000))}</span></h3>
     <ol>${ss.map(s => { const t = new Date(s.start);
-      const extra = [s.attitude && `“${esc(s.attitude)}”`, avg(s.full) && `충만 ${avg(s.full)}`, avg(s.flow) && `몰입 ${avg(s.flow)}`, s.note && esc(s.note)].filter(Boolean).join(' · ');
+      const extra = [s.attitude && `“${marked(s.attitude)}”`, avg(s.full) && `충만 ${avg(s.full)}`, avg(s.flow) && `몰입 ${avg(s.flow)}`, s.note && esc(s.note)].filter(Boolean).join(' · ');
       return `<li class="rec"><div class="top"><span>${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}</span><span>${Math.round(s.ms / 60000)}분 <small>${s.set ? `· ${esc(s.set)} ` : ''}${s.rounds != null ? `· 몰입 ${s.rounds}회 ` : ''}· 이탈 ${s.leaves}회</small></span></div>${extra ? `<div class="att">${extra}</div>` : ''}</li>`;
     }).join('')}</ol></section>`).join('') : '<p class="empty">1분 이상 몰입하면 여기에 날짜별로 쌓입니다.</p>';
 }
@@ -643,10 +655,10 @@ async function start() {
   openPip(); // 클릭 직후에 호출해야 브라우저가 창을 열어 줌
   try { if (Notification.permission === 'default') Notification.requestPermission(); } catch {}
   closeReflect(false); // 지난 세션의 돌아봄 창이 열려 있으면 그대로 확정
-  if (!$('attitude').value.trim()) $('attitude').value = suggestAtt(); // 비워 두면 추천 태도로 시작
-  attitude = $('attitude').value.trim(); rememberAtt(attitude); renderAttRecent();
+  if (!getAtt()) setAtt(suggestAtt()); // 비워 두면 추천 태도로 시작
+  attitude = getAtt(); rememberAtt(attitude); renderAttRecent();
   fulls = []; flows = [];
-  $('attBox').hidden = true; $('attLine').hidden = !attitude; $('attLine').textContent = attitude;
+  $('attBox').hidden = true; $('attLine').hidden = !attitude; $('attLine').innerHTML = marked(attitude);
   await Tone.start();
   kit ??= buildKit();
   running = true; paused = false; startAt = Date.now(); leaves = 0; focusMs = 0; rounds = 0;
@@ -691,7 +703,7 @@ $('toggle').onclick = primary;
 $('end').onclick = () => { if (running) stop(); };
 // 스페이스바: 대기 중엔 시작, 공부 중엔 일시정지·계속 (입력칸·버튼·접기 제목에 포커스가 있으면 그쪽 동작 우선)
 document.addEventListener('keydown', e => {
-  if (e.code !== 'Space' || e.repeat || e.target.closest?.('input, button, summary, textarea, [tabindex]')) return;
+  if (e.code !== 'Space' || e.repeat || e.target.closest?.('input, button, summary, textarea, [tabindex], [contenteditable]')) return;
   e.preventDefault(); primary();
 });
 $('regen').onclick = () => newBeat(true);
@@ -712,7 +724,7 @@ try { active = Math.min(+localStorage.getItem(ACTIVE_KEY) || 0, sets.length - 1)
 buildGrid(); newBeat(true); renderSets(); renderLog();
 // 돌아봄을 남기기 전에 페이지를 닫았던 세션은 그대로 확정
 { const list = load(); if (list.some(s => s.draft)) { list.forEach(s => delete s.draft); save(list); } }
-renderAttRecent(); $('attitude').value = getLS(ATT_KEY, [])[0] || '';
+renderAttRecent(); setAtt(getLS(ATT_KEY, [])[0] || '');
 $('sheetUrl').value = getLS(SHEET_URL_KEY, ''); sync();
 </script>
 </body>
